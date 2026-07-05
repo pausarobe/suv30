@@ -9,7 +9,7 @@ const priorityLocations = ["zaragoza", "reus", "tarragona"];
 
 export function calculateOpportunityScore(
   advertisement: Advertisement,
-  model?: Model
+  model?: Model,
 ): OpportunityScore {
   const reasons: string[] = [];
   const text = [
@@ -27,13 +27,13 @@ export function calculateOpportunityScore(
     return buildScore(2, "Descartado", reasons, false);
   }
 
-  if (text.includes("diésel") || text.includes("diesel")) {
-    reasons.push("Descartar: diésel");
+  if (text.includes("diesel") || text.includes("diésel")) {
+    reasons.push("Descartar: diesel");
     return buildScore(2, "Descartado", reasons, false);
   }
 
-  if (text.includes("eléctrico") || text.includes("electrico")) {
-    reasons.push("Descartar: eléctrico puro");
+  if (text.includes("electrico") || text.includes("eléctrico")) {
+    reasons.push("Descartar: electrico puro");
     return buildScore(2, "Descartado", reasons, false);
   }
 
@@ -47,26 +47,9 @@ export function calculateOpportunityScore(
     score += 0.2;
   }
 
+  score += getPriceScore(advertisement.price, reasons);
+
   if (model) {
-    const priceGap = model.targetPrice - advertisement.price;
-
-    if (priceGap >= 1500) {
-      score += 1.5;
-      reasons.push("Precio muy por debajo del objetivo");
-    } else if (priceGap >= 0) {
-      score += 1;
-      reasons.push("Precio dentro del objetivo");
-    } else if (advertisement.price <= 30000) {
-      score += 0.4;
-      reasons.push("Precio por debajo del máximo");
-    } else if (advertisement.price <= 30500) {
-      score -= 0.2;
-      reasons.push("Se pasa poco del presupuesto");
-    } else {
-      score -= 1.5;
-      reasons.push("Precio por encima del presupuesto");
-    }
-
     if (model.trunk >= 580) {
       score += 0.4;
       reasons.push("Maletero amplio");
@@ -80,23 +63,16 @@ export function calculateOpportunityScore(
     if (consumptionScore.reason) {
       reasons.push(consumptionScore.reason);
     }
-
-    if (model.rating.toLowerCase().includes("recomendable")) {
-      score += 0.3;
-    }
-  } else if (advertisement.price <= 30000) {
-    score += 0.4;
-    reasons.push("Precio por debajo del máximo");
   }
 
   if (advertisement.km <= 20000) {
     score += 1;
-    reasons.push("Kilómetros bajos");
+    reasons.push("Kilometros bajos");
   } else if (advertisement.km <= 40000) {
     score += 0.6;
-    reasons.push("Kilómetros razonables");
+    reasons.push("Kilometros razonables");
   } else if (advertisement.km <= 50000) {
-    reasons.push("Kilómetros aceptables");
+    reasons.push("Kilometros aceptables");
   } else if (advertisement.km <= 52000) {
     score -= 0.4;
     reasons.push("Se pasa poco de km");
@@ -107,15 +83,15 @@ export function calculateOpportunityScore(
 
   if (advertisement.year >= 2026) {
     score += 0.8;
-    reasons.push("Año 2026");
+    reasons.push("Ano 2026");
   } else if (advertisement.year === 2025) {
     score += 0.6;
-    reasons.push("Año 2025");
+    reasons.push("Ano 2025");
   } else if (advertisement.year === 2024) {
     score += 0.2;
   } else {
     score -= 0.8;
-    reasons.push("Año menos prioritario");
+    reasons.push("Ano menos prioritario");
   }
 
   const location = `${advertisement.city} ${advertisement.province}`.toLowerCase();
@@ -137,7 +113,7 @@ export function calculateOpportunityScore(
 
 export function enrichAdvertisementsWithOpportunity(
   advertisements: Advertisement[],
-  models: Model[]
+  models: Model[],
 ) {
   const modelsById = new Map(models.map((model) => [model.id, model]));
 
@@ -147,10 +123,30 @@ export function enrichAdvertisementsWithOpportunity(
       model: modelsById.get(advertisement.modelId),
       opportunity: calculateOpportunityScore(
         advertisement,
-        modelsById.get(advertisement.modelId)
+        modelsById.get(advertisement.modelId),
       ),
     }))
     .sort((a, b) => b.opportunity.score - a.opportunity.score);
+}
+
+function getPriceScore(price: number, reasons: string[]) {
+  if (price <= 28000) {
+    reasons.push("Precio muy competitivo");
+    return 1;
+  }
+
+  if (price <= 30000) {
+    reasons.push("Precio por debajo del maximo");
+    return 0.4;
+  }
+
+  if (price <= 30500) {
+    reasons.push("Se pasa poco del presupuesto");
+    return -0.2;
+  }
+
+  reasons.push("Precio por encima del presupuesto");
+  return -1.5;
 }
 
 function getConsumptionScore(consumption: number) {
@@ -215,7 +211,7 @@ function buildScore(
   score: number,
   classification: OpportunityClassification,
   reasons: string[],
-  isRadarDeal: boolean
+  isRadarDeal: boolean,
 ): OpportunityScore {
   return {
     score,

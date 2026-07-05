@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { MdDeleteForever, MdEdit, MdOpenInNew } from "react-icons/md";
+import {
+  MdArrowDownward,
+  MdArrowUpward,
+  MdDeleteForever,
+  MdEdit,
+  MdOpenInNew,
+  MdUnfoldMore,
+} from "react-icons/md";
 
 import type { Advertisement } from "@/domain/Advertisement";
 import type { Model } from "@/domain/Model";
 import {
   AdvertisementService,
   type CreateAdvertisementInput,
+  type MarketplaceImportResult,
 } from "@/services/AdvertisementService";
 import { ModelService } from "@/services/ModelService";
 import { enrichAdvertisementsWithOpportunity } from "@/services/OpportunityService";
@@ -14,6 +22,7 @@ import {
   getOpportunityGradient,
   getOpportunityTextColor,
 } from "@/utils/opportunityStyle";
+import { RiGeminiLine } from "react-icons/ri";
 
 type AdvertisementFormState = {
   modelId: string;
@@ -32,6 +41,55 @@ type AdvertisementFormState = {
   notes: string;
 };
 
+type ImportFormState = {
+  source: string;
+  modelId: string;
+  searchUrl: string;
+  maxResults: string;
+};
+
+type MarketSortKey = "io" | "price" | "km" | "year" | "trunk";
+type SortDirection = "asc" | "desc";
+
+type MarketSortState = {
+  key: MarketSortKey;
+  direction: SortDirection;
+};
+
+const importSources = [
+  {
+    id: "cochesnet",
+    label: "coches.net",
+    placeholder: "https://www.coches.net/...",
+  },
+  {
+    id: "autohero",
+    label: "Autohero",
+    placeholder: "https://www.autohero.com/...",
+  },
+  {
+    id: "ocasionplus",
+    label: "OcasionPlus",
+    placeholder: "https://www.ocasionplus.com/...",
+  },
+  {
+    id: "flexicar",
+    label: "Flexicar",
+    placeholder: "https://www.flexicar.es/...",
+  },
+  {
+    id: "automovilessanchez",
+    label: "Automoviles Sanchez",
+    placeholder: "https://automovilessanchez.es/...",
+  },
+  {
+    id: "carza",
+    label: "Carza Ocasion",
+    placeholder: "https://carzaocasion.com/...",
+  },
+  { id: "generic", label: "Otra web", placeholder: "https://..." },
+];
+
 const defaultFormState: AdvertisementFormState = {
   modelId: "",
   title: "",
@@ -49,6 +107,20 @@ const defaultFormState: AdvertisementFormState = {
   notes: "",
 };
 
+const defaultImportFormState: ImportFormState = {
+  source: "cochesnet",
+  modelId: "",
+  searchUrl: "",
+  maxResults: "10",
+};
+
+const ecoClassMap: Record<string, string> = {
+  "0": "cero",
+  ECO: "eco",
+  C: "c",
+  B: "b",
+};
+
 const advertisementService = new AdvertisementService();
 const modelService = new ModelService();
 
@@ -56,20 +128,52 @@ export default function MarketPage() {
   const [advertisements, setAdvertisements] = useState<Advertisement[]>([]);
   const [models, setModels] = useState<Model[]>([]);
   const [form, setForm] = useState<AdvertisementFormState>(defaultFormState);
+  const [importForm, setImportForm] = useState<ImportFormState>(
+    defaultImportFormState,
+  );
   const [editingAdvertisementId, setEditingAdvertisementId] = useState<
     string | null
   >(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formMessage, setFormMessage] = useState<string | null>(null);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [sortState, setSortState] = useState<MarketSortState>({
+    key: "io",
+    direction: "desc",
+  });
+  const [importResult, setImportResult] =
+    useState<MarketplaceImportResult | null>(null);
 
   const rankedAdvertisements = useMemo(
     () => enrichAdvertisementsWithOpportunity(advertisements, models),
-    [advertisements, models]
+    [advertisements, models],
   );
+  const sortedAdvertisements = useMemo(() => {
+    const getSortValue = (item: (typeof rankedAdvertisements)[number]) => {
+      if (sortState.key === "io") {
+        return item.opportunity.score;
+      }
+
+      if (sortState.key === "trunk") {
+        return item.model?.trunk ?? 0;
+      }
+
+      return item.advertisement[sortState.key];
+    };
+
+    return [...rankedAdvertisements].sort((firstItem, secondItem) => {
+      const firstValue = getSortValue(firstItem);
+      const secondValue = getSortValue(secondItem);
+      const directionMultiplier = sortState.direction === "asc" ? 1 : -1;
+
+      return (firstValue - secondValue) * directionMultiplier;
+    });
+  }, [rankedAdvertisements, sortState]);
   const radarDeals = rankedAdvertisements.filter(
-    (item) => item.opportunity.isRadarDeal
+    (item) => item.opportunity.isRadarDeal,
   );
 
   useEffect(() => {
@@ -85,6 +189,10 @@ export default function MarketPage() {
           ...currentForm,
           modelId: currentForm.modelId || modelsResponse[0]?.id || "",
         }));
+        setImportForm((currentForm) => ({
+          ...currentForm,
+          modelId: currentForm.modelId || modelsResponse[0]?.id || "",
+        }));
       })
       .catch(() => setError("No se han podido cargar los datos del mercado."))
       .finally(() => setIsLoading(false));
@@ -96,13 +204,59 @@ export default function MarketPage() {
       event:
         | React.ChangeEvent<HTMLInputElement>
         | React.ChangeEvent<HTMLSelectElement>
-        | React.ChangeEvent<HTMLTextAreaElement>
+        | React.ChangeEvent<HTMLTextAreaElement>,
     ) => {
       setForm((currentForm) => ({
         ...currentForm,
         [field]: event.target.value,
       }));
     };
+
+  const updateImportField =
+    (field: keyof ImportFormState) =>
+    (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      setImportForm((currentForm) => ({
+        ...currentForm,
+        [field]: event.target.value,
+      }));
+    };
+
+  const refreshAdvertisements = async () => {
+    const nextAdvertisements = await advertisementService.getAdvertisements();
+    setAdvertisements(nextAdvertisements);
+  };
+
+  const handleImportSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+    setIsImporting(true);
+    setImportMessage(null);
+    setImportResult(null);
+
+    try {
+      const result = await advertisementService.importFromMarketplace({
+        source: importForm.source,
+        modelId: importForm.modelId,
+        searchUrl: importForm.searchUrl,
+        maxResults: Number(importForm.maxResults),
+      });
+
+      await refreshAdvertisements();
+      setImportResult(result);
+      setImportMessage(
+        `${result.imported} nuevos, ${result.updated} actualizados, ${result.skipped} saltados.`,
+      );
+    } catch (error) {
+      setImportMessage(
+        error instanceof Error
+          ? error.message
+          : "No se ha podido importar desde la web indicada.",
+      );
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -130,7 +284,7 @@ export default function MarketPage() {
       const savedAdvertisement = editingAdvertisementId
         ? await advertisementService.updateAdvertisement(
             editingAdvertisementId,
-            advertisement
+            advertisement,
           )
         : await advertisementService.createAdvertisement(advertisement);
 
@@ -139,9 +293,9 @@ export default function MarketPage() {
           ? currentAdvertisements.map((currentAdvertisement) =>
               currentAdvertisement.id === editingAdvertisementId
                 ? savedAdvertisement
-                : currentAdvertisement
+                : currentAdvertisement,
             )
-          : [...currentAdvertisements, savedAdvertisement]
+          : [...currentAdvertisements, savedAdvertisement],
       );
       setForm({
         ...defaultFormState,
@@ -149,13 +303,13 @@ export default function MarketPage() {
       });
       setEditingAdvertisementId(null);
       setFormMessage(
-        editingAdvertisementId ? "Anuncio actualizado." : "Anuncio guardado."
+        editingAdvertisementId ? "Anuncio actualizado." : "Anuncio guardado.",
       );
     } catch {
       setFormMessage(
         editingAdvertisementId
           ? "No se ha podido actualizar el anuncio."
-          : "No se ha podido guardar el anuncio."
+          : "No se ha podido guardar el anuncio.",
       );
     } finally {
       setIsSaving(false);
@@ -198,7 +352,9 @@ export default function MarketPage() {
     try {
       await advertisementService.deleteAdvertisement(id);
       setAdvertisements((currentAdvertisements) =>
-        currentAdvertisements.filter((advertisement) => advertisement.id !== id)
+        currentAdvertisements.filter(
+          (advertisement) => advertisement.id !== id,
+        ),
       );
       if (editingAdvertisementId === id) {
         cancelEdit();
@@ -207,6 +363,16 @@ export default function MarketPage() {
     } catch {
       setFormMessage("No se ha podido borrar el anuncio.");
     }
+  };
+
+  const handleSort = (key: MarketSortKey) => {
+    setSortState((currentSortState) => ({
+      key,
+      direction:
+        currentSortState.key === key && currentSortState.direction === "desc"
+          ? "asc"
+          : "desc",
+    }));
   };
 
   return (
@@ -220,6 +386,111 @@ export default function MarketPage() {
 
       {!isLoading && !error && (
         <>
+          <form onSubmit={handleImportSubmit} style={importPanelStyle}>
+            <h2 style={sectionTitleStyle}>
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "6px" }}
+              >
+                <span>Importar desde web</span>
+                <RiGeminiLine
+                  style={{
+                    fontSize: "1.5rem",
+                    color: "var(--color-secondary)",
+                  }}
+                />
+              </div>
+            </h2>
+            <label style={fieldStyle}>
+              Web
+              <select
+                required
+                value={importForm.source}
+                onChange={updateImportField("source")}
+                style={inputStyle}
+              >
+                {importSources.map((source) => (
+                  <option key={source.id} value={source.id}>
+                    {source.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={fieldStyle}>
+              Modelo
+              <select
+                required
+                value={importForm.modelId}
+                onChange={updateImportField("modelId")}
+                style={inputStyle}
+              >
+                {models.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {formatModelOptionLabel(model)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={wideFieldStyle}>
+              URL filtrada
+              <input
+                required
+                type="url"
+                value={importForm.searchUrl}
+                onChange={updateImportField("searchUrl")}
+                style={inputStyle}
+                placeholder={
+                  importSources.find(
+                    (source) => source.id === importForm.source,
+                  )?.placeholder ?? "https://..."
+                }
+              />
+            </label>
+
+            <label style={fieldStyle}>
+              Limite
+              <input
+                required
+                min="1"
+                max="25"
+                type="number"
+                value={importForm.maxResults}
+                onChange={updateImportField("maxResults")}
+                style={inputStyle}
+              />
+            </label>
+
+            <div style={actionsStyle}>
+              <button
+                disabled={isImporting || models.length === 0}
+                type="submit"
+              >
+                {isImporting ? "Importando..." : "Importar anuncios"}
+              </button>
+              {importMessage && (
+                <span className="info-text">{importMessage}</span>
+              )}
+            </div>
+
+            {importResult && (
+              <div style={importSummaryStyle}>
+                {importResult.errors.map((importError) => (
+                  <p key={importError} className="info-text">
+                    {importError}
+                  </p>
+                ))}
+                {importResult.results.slice(0, 6).map((result) => (
+                  <p key={`${result.status}-${result.url}`}>
+                    <strong>{result.status}</strong>{" "}
+                    {result.title ?? result.url}
+                    {result.reason ? ` - ${result.reason}` : ""}
+                  </p>
+                ))}
+              </div>
+            )}
+          </form>
+
           <form onSubmit={handleSubmit} style={formStyle}>
             <h2 style={sectionTitleStyle}>
               {editingAdvertisementId ? "Editar anuncio" : "Añadir anuncio"}
@@ -235,7 +506,7 @@ export default function MarketPage() {
               >
                 {models.map((model) => (
                   <option key={model.id} value={model.id}>
-                    {model.brand} {model.model}
+                    {formatModelOptionLabel(model)}
                   </option>
                 ))}
               </select>
@@ -397,11 +668,15 @@ export default function MarketPage() {
                     : "Guardar anuncio"}
               </button>
               {editingAdvertisementId && (
-                <button onClick={cancelEdit} style={secondaryButtonStyle} type="button">
+                <button
+                  onClick={cancelEdit}
+                  style={secondaryButtonStyle}
+                  type="button"
+                >
                   Cancelar
                 </button>
               )}
-              {formMessage && <span>{formMessage}</span>}
+              {formMessage && <span className="info-text">{formMessage}</span>}
             </div>
           </form>
 
@@ -436,29 +711,68 @@ export default function MarketPage() {
             <table style={tableStyle}>
               <thead>
                 <tr>
-                  <th style={thStyle}>IO</th>
-                  <th style={thStyle}>Estado</th>
+                  <SortableHeader
+                    label="IO"
+                    sortKey="io"
+                    sortState={sortState}
+                    onSort={handleSort}
+                  />
                   <th style={thStyle}>Modelo</th>
-                  <th style={thStyle}>Precio</th>
-                  <th style={thStyle}>Km</th>
-                  <th style={thStyle}>Año</th>
+                  <SortableHeader
+                    label="Maletero"
+                    sortKey="trunk"
+                    sortState={sortState}
+                    onSort={handleSort}
+                  />
+                  <th style={thStyle}>Etiqueta</th>
+                  <th style={thStyle}>Consumo</th>
+                  <SortableHeader
+                    label="Precio"
+                    sortKey="price"
+                    sortState={sortState}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Km"
+                    sortKey="km"
+                    sortState={sortState}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Año"
+                    sortKey="year"
+                    sortState={sortState}
+                    onSort={handleSort}
+                  />
                   <th style={thStyle}>Motivos</th>
                   <th style={thStyle}>Acciones</th>
                 </tr>
               </thead>
 
               <tbody>
-                {rankedAdvertisements.map(
+                {sortedAdvertisements.map(
                   ({ advertisement, model, opportunity }) => (
                     <tr key={advertisement.id}>
                       <td style={tdStyle}>
                         <OpportunityBadge score={opportunity.score} />
                       </td>
-                      <td style={tdStyle}>{opportunity.classification}</td>
+                      <td style={tdStyle}>{advertisement.title}</td>
                       <td style={tdStyle}>
-                        {model
-                          ? `${model.brand} ${model.model}`
-                          : advertisement.modelId}
+                        {model?.trunk ? `${model.trunk} L` : "Pendiente"}
+                      </td>
+                      <td style={tdStyle}>
+                        <div
+                          className={`eco-badge ${
+                            model ? ecoClassMap[model.ecoLabel] : ""
+                          }`}
+                        >
+                          {model?.ecoLabel ?? "Pendiente"}
+                        </div>
+                      </td>
+                      <td style={tdStyle}>
+                        {model?.consumption
+                          ? `${model.consumption.toFixed(1)} l/100`
+                          : "Pendiente"}
                       </td>
                       <td style={tdStyle}>
                         {advertisement.price.toLocaleString("es-ES")} €
@@ -481,7 +795,9 @@ export default function MarketPage() {
                           </Link>
                           <button
                             aria-label="Editar anuncio"
-                            onClick={() => handleEditAdvertisement(advertisement)}
+                            onClick={() =>
+                              handleEditAdvertisement(advertisement)
+                            }
                             style={editButtonStyle}
                             type="button"
                           >
@@ -500,7 +816,7 @@ export default function MarketPage() {
                         </div>
                       </td>
                     </tr>
-                  )
+                  ),
                 )}
               </tbody>
             </table>
@@ -524,6 +840,50 @@ function OpportunityBadge({ score }: { score: number }) {
     >
       {displayScore}
     </span>
+  );
+}
+
+function formatModelOptionLabel(model: Model) {
+  const details = [
+    model.generation,
+    model.trunk > 0 ? `${model.trunk} L` : "",
+    model.consumption > 0 ? `${model.consumption.toFixed(1)} l/100` : "",
+    model.ecoLabel ? `Etiqueta ${model.ecoLabel}` : "",
+  ].filter(Boolean);
+
+  return `${model.brand} ${model.model}${details.length ? ` - ${details.join(" · ")}` : ""}`;
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  sortState,
+  onSort,
+}: {
+  label: string;
+  sortKey: MarketSortKey;
+  sortState: MarketSortState;
+  onSort: (key: MarketSortKey) => void;
+}) {
+  const isActive = sortState.key === sortKey;
+  const SortIcon = isActive
+    ? sortState.direction === "asc"
+      ? MdArrowUpward
+      : MdArrowDownward
+    : MdUnfoldMore;
+
+  return (
+    <th style={thStyle}>
+      <button
+        aria-label={`Ordenar por ${label}`}
+        onClick={() => onSort(sortKey)}
+        style={sortableHeaderButtonStyle}
+        type="button"
+      >
+        <span>{label}</span>
+        <SortIcon aria-hidden="true" style={sortableHeaderIconStyle} />
+      </button>
+    </th>
   );
 }
 
@@ -565,6 +925,29 @@ const radarItemStyle: React.CSSProperties = {
   border: "1px solid #edf2f7",
   borderRadius: "6px",
   background: "#f8fafc",
+};
+
+const importPanelStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))",
+  gap: "12px",
+  marginTop: "1rem",
+  padding: "16px",
+  border: "1px solid #bfdbfe",
+  borderRadius: "8px",
+  background: "linear-gradient(135deg, #eff6ff 0%, #ffffff 55%, #ecfdf5 100%)",
+  boxShadow: "0 12px 28px rgb(15 23 42 / 6%)",
+};
+
+const importSummaryStyle: React.CSSProperties = {
+  gridColumn: "1 / -1",
+  display: "grid",
+  gap: "6px",
+  padding: "10px",
+  border: "1px solid #dbeafe",
+  borderRadius: "6px",
+  background: "rgb(255 255 255 / 70%)",
+  fontSize: "0.86rem",
 };
 
 const formStyle: React.CSSProperties = {
@@ -623,7 +1006,7 @@ const tableShellStyle: React.CSSProperties = {
 
 const tableStyle: React.CSSProperties = {
   width: "100%",
-  minWidth: "1040px",
+  minWidth: "1220px",
   borderCollapse: "collapse",
 };
 
@@ -635,6 +1018,27 @@ const thStyle: React.CSSProperties = {
   background: "#f8fafc",
   fontSize: "0.78rem",
   textTransform: "uppercase",
+};
+
+const sortableHeaderButtonStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  padding: 0,
+  minHeight: "auto",
+  width: "auto",
+  border: 0,
+  background: "transparent",
+  color: "inherit",
+  cursor: "pointer",
+  font: "inherit",
+  fontWeight: 800,
+  textTransform: "uppercase",
+};
+
+const sortableHeaderIconStyle: React.CSSProperties = {
+  flex: "0 0 auto",
+  fontSize: "1rem",
 };
 
 const tdStyle: React.CSSProperties = {

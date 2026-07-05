@@ -65,6 +65,55 @@ p {
   -webkit-overflow-scrolling: touch;
 }
 
+.info-text {
+  color: var(--color-secondary);
+  font-weight: 500;
+}
+
+.eco-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: Arial, sans-serif;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 2px rgba(255, 255, 255, 0.3);
+
+  user-select: none;
+}
+
+.eco-badge.cero {
+  background: #075fa3;
+}
+
+.eco-badge.eco {
+  background: linear-gradient(
+    90deg,
+    #63a531 0%,
+    #63a531 50%,
+    #075fa3 50%,
+    #075fa3 100%
+  );
+  font-size: 0.75rem;
+}
+
+.eco-badge.c {
+  background: #63a531;
+}
+
+.eco-badge.b {
+  background: #fee812;
+}
+
 @media (max-width: 640px) {
   h1 {
     font-size: 1.55rem;

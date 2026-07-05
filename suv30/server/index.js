@@ -3,6 +3,10 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
+import {
+  getImportProviders,
+  scrapeMarketplace,
+} from "./scrapers/cochesNetScraper.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -20,9 +24,7 @@ db.exec(`
     height INTEGER NOT NULL DEFAULT 0,
     trunk INTEGER NOT NULL,
     consumption REAL NOT NULL DEFAULT 0,
-    ecoLabel TEXT NOT NULL DEFAULT 'C',
-    targetPrice INTEGER NOT NULL,
-    rating TEXT NOT NULL
+    ecoLabel TEXT NOT NULL DEFAULT 'C'
   );
 
   CREATE TABLE IF NOT EXISTS advertisements (
@@ -47,8 +49,42 @@ db.exec(`
   );
 `);
 
-const modelColumns = db.prepare("PRAGMA table_info(models)").all();
+let modelColumns = db.prepare("PRAGMA table_info(models)").all();
 const hasColumn = (name) => modelColumns.some((column) => column.name === name);
+
+if (hasColumn("targetPrice") || hasColumn("rating")) {
+  db.exec(`
+    PRAGMA foreign_keys = OFF;
+
+    CREATE TABLE models_next (
+      id TEXT PRIMARY KEY,
+      brand TEXT NOT NULL,
+      model TEXT NOT NULL,
+      generation TEXT NOT NULL,
+      length INTEGER NOT NULL DEFAULT 0,
+      width INTEGER NOT NULL DEFAULT 0,
+      height INTEGER NOT NULL DEFAULT 0,
+      trunk INTEGER NOT NULL,
+      consumption REAL NOT NULL DEFAULT 0,
+      ecoLabel TEXT NOT NULL DEFAULT 'C'
+    );
+
+    INSERT INTO models_next (
+      id, brand, model, generation, length, width, height,
+      trunk, consumption, ecoLabel
+    )
+    SELECT
+      id, brand, model, generation, length, width, height,
+      trunk, consumption, ecoLabel
+    FROM models;
+
+    DROP TABLE models;
+    ALTER TABLE models_next RENAME TO models;
+
+    PRAGMA foreign_keys = ON;
+  `);
+  modelColumns = db.prepare("PRAGMA table_info(models)").all();
+}
 
 if (!hasColumn("consumption")) {
   db.exec("ALTER TABLE models ADD COLUMN consumption REAL NOT NULL DEFAULT 0");
@@ -93,8 +129,6 @@ const requiredModelFields = [
   "trunk",
   "consumption",
   "ecoLabel",
-  "targetPrice",
-  "rating",
 ];
 
 const requiredAdvertisementFields = [
@@ -137,8 +171,6 @@ const mapModelInput = (body, id) => ({
   trunk: toNumber(body.trunk),
   consumption: toNumber(body.consumption),
   ecoLabel: toText(body.ecoLabel),
-  targetPrice: toNumber(body.targetPrice),
-  rating: toText(body.rating),
 });
 
 const mapAdvertisementInput = (body, id, firstSeen) => {
@@ -164,6 +196,48 @@ const mapAdvertisementInput = (body, id, firstSeen) => {
     notes: toText(body.notes),
   };
 };
+
+const insertAdvertisement = (advertisement) =>
+  db
+    .prepare(
+      `
+        INSERT INTO advertisements (
+          id, modelId, title, price, year, km, fuel, gearbox, horsepower,
+          city, province, seller, source, url, firstSeen, lastSeen, notes
+        )
+        VALUES (
+          @id, @modelId, @title, @price, @year, @km, @fuel, @gearbox, @horsepower,
+          @city, @province, @seller, @source, @url, @firstSeen, @lastSeen, @notes
+        )
+      `
+    )
+    .run(advertisement);
+
+const updateAdvertisement = (advertisement) =>
+  db
+    .prepare(
+      `
+        UPDATE advertisements
+        SET modelId = @modelId,
+            title = @title,
+            price = @price,
+            year = @year,
+            km = @km,
+            fuel = @fuel,
+            gearbox = @gearbox,
+            horsepower = @horsepower,
+            city = @city,
+            province = @province,
+            seller = @seller,
+            source = @source,
+            url = @url,
+            firstSeen = @firstSeen,
+            lastSeen = @lastSeen,
+            notes = @notes
+        WHERE id = @id
+      `
+    )
+    .run(advertisement);
 
 const validateRequiredFields = (body, fields) => {
   const missingFields = fields.filter((field) => toText(body[field]) === "");
@@ -198,7 +272,6 @@ const validateModelInput = (body) => {
     "height",
     "trunk",
     "consumption",
-    "targetPrice",
   ]);
 
   if (numericFieldsError) {
@@ -244,6 +317,44 @@ const validateAdvertisementInput = (body) => {
   return null;
 };
 
+const getImportErrorMessage = (error) => {
+  const message =
+    error instanceof Error ? error.message : "No se ha podido importar desde coches.net";
+
+  if (message.includes("ERR_NETWORK_ACCESS_DENIED")) {
+    return "El navegador del importador no tiene acceso a Internet. Si la app la arrancó Codex, inicia `npm run dev` desde tu terminal normal y vuelve a probar.";
+  }
+
+  if (message.includes("ERR_NAME_NOT_RESOLVED") || message.includes("ENOTFOUND")) {
+    return "No se ha podido resolver coches.net. Revisa la conexión a Internet o el DNS.";
+  }
+
+  if (message.includes("Timeout") || message.includes("timeout")) {
+    return "coches.net ha tardado demasiado en responder. Prueba con un limite menor o vuelve a intentarlo.";
+  }
+
+  if (message.includes("ERR_CERT") || message.includes("CERT_")) {
+    return "El navegador del importador ha rechazado el certificado de la web. Revisa certificados/proxy/VPN.";
+  }
+
+  return message;
+};
+
+const getListingErrorReason = (error) => {
+  const message =
+    error instanceof Error ? error.message : "No se ha podido leer el anuncio.";
+
+  if (message.includes("ERR_NETWORK_ACCESS_DENIED")) {
+    return "Sin acceso de red desde el navegador del importador.";
+  }
+
+  if (message.includes("Timeout") || message.includes("timeout")) {
+    return "Tiempo de espera agotado al leer el anuncio.";
+  }
+
+  return message;
+};
+
 app.get("/api/models", (_request, response) => {
   const models = db.prepare("SELECT * FROM models ORDER BY brand, model").all();
   response.json(models);
@@ -271,11 +382,11 @@ app.post("/api/models", (request, response) => {
     `
       INSERT INTO models (
         id, brand, model, generation, length, width, height,
-        trunk, consumption, ecoLabel, targetPrice, rating
+        trunk, consumption, ecoLabel
       )
       VALUES (
         @id, @brand, @model, @generation, @length, @width, @height,
-        @trunk, @consumption, @ecoLabel, @targetPrice, @rating
+        @trunk, @consumption, @ecoLabel
       )
     `
   ).run(model);
@@ -305,9 +416,7 @@ app.put("/api/models/:id", (request, response) => {
             height = @height,
             trunk = @trunk,
             consumption = @consumption,
-            ecoLabel = @ecoLabel,
-            targetPrice = @targetPrice,
-            rating = @rating
+            ecoLabel = @ecoLabel
         WHERE id = @id
       `
     )
@@ -344,6 +453,130 @@ app.delete("/api/models/:id", (request, response) => {
   response.status(204).send();
 });
 
+const importListings = async (request, response, defaultSource = "generic") => {
+  const searchUrl = toText(request.body.searchUrl);
+  const modelId = toText(request.body.modelId);
+  const source = toText(request.body.source) || defaultSource;
+  const maxResults = Math.min(Math.max(Number(request.body.maxResults) || 10, 1), 25);
+
+  if (!searchUrl || !modelId) {
+    response.status(400).json({ error: "searchUrl y modelId son obligatorios" });
+    return;
+  }
+
+  let parsedSearchUrl;
+
+  try {
+    parsedSearchUrl = new URL(searchUrl);
+  } catch {
+    response.status(400).json({ error: "La URL de busqueda no es valida" });
+    return;
+  }
+
+  const modelExists = db.prepare("SELECT id FROM models WHERE id = ?").get(modelId);
+
+  if (!modelExists) {
+    response.status(400).json({ error: "El modelo seleccionado no existe" });
+    return;
+  }
+
+  try {
+    const scrapedResult = await scrapeMarketplace({ searchUrl, maxResults, source });
+    const summary = {
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [...scrapedResult.errors],
+      results: [],
+    };
+
+    for (const listing of scrapedResult.listings) {
+      if (listing.status !== "ok") {
+        summary.skipped += 1;
+        summary.results.push({
+          status: listing.status,
+          url: listing.url,
+          reason: getListingErrorReason(new Error(listing.reason)),
+        });
+        continue;
+      }
+
+      const existingAdvertisement = db
+        .prepare("SELECT * FROM advertisements WHERE url = ?")
+        .get(listing.advertisement.url);
+      const advertisementInput = {
+        ...listing.advertisement,
+        modelId,
+      };
+      const validationError = validateAdvertisementInput(advertisementInput);
+
+      if (validationError) {
+        summary.skipped += 1;
+        summary.results.push({
+          status: "skipped",
+          url: listing.advertisement.url,
+          title: listing.advertisement.title,
+          reason: validationError,
+        });
+        continue;
+      }
+
+      if (existingAdvertisement) {
+        const advertisement = mapAdvertisementInput(
+          {
+            ...advertisementInput,
+            notes: existingAdvertisement.notes || advertisementInput.notes,
+          },
+          existingAdvertisement.id,
+          existingAdvertisement.firstSeen
+        );
+
+        updateAdvertisement(advertisement);
+        summary.updated += 1;
+        summary.results.push({
+          status: "updated",
+          id: advertisement.id,
+          title: advertisement.title,
+          url: advertisement.url,
+        });
+        continue;
+      }
+
+      const advertisement = mapAdvertisementInput(
+        advertisementInput,
+        `ad-import-${Date.now()}-${summary.imported + summary.updated + 1}`
+      );
+
+      insertAdvertisement(advertisement);
+      summary.imported += 1;
+      summary.results.push({
+        status: "imported",
+        id: advertisement.id,
+        title: advertisement.title,
+        url: advertisement.url,
+      });
+    }
+
+    response.json(summary);
+  } catch (error) {
+    response.status(502).json({
+      error: getImportErrorMessage(error),
+    });
+  }
+};
+
+app.get("/api/import/providers", (_request, response) => {
+  response.json(getImportProviders());
+});
+
+app.post("/api/import/listings", async (request, response) => {
+  await importListings(request, response);
+});
+
+app.post("/api/import/cochesnet", async (request, response) => {
+  await importListings(request, response, "cochesnet");
+});
+
 app.get("/api/advertisements", (_request, response) => {
   const advertisements = db
     .prepare("SELECT * FROM advertisements ORDER BY price ASC")
@@ -375,18 +608,7 @@ app.post("/api/advertisements", (request, response) => {
 
   const advertisement = mapAdvertisementInput(request.body);
 
-  db.prepare(
-    `
-      INSERT INTO advertisements (
-        id, modelId, title, price, year, km, fuel, gearbox, horsepower,
-        city, province, seller, source, url, firstSeen, lastSeen, notes
-      )
-      VALUES (
-        @id, @modelId, @title, @price, @year, @km, @fuel, @gearbox, @horsepower,
-        @city, @province, @seller, @source, @url, @firstSeen, @lastSeen, @notes
-      )
-    `
-  ).run(advertisement);
+  insertAdvertisement(advertisement);
 
   response.status(201).json(advertisement);
 });
@@ -415,28 +637,7 @@ app.put("/api/advertisements/:id", (request, response) => {
     currentAdvertisement.firstSeen
   );
 
-  db.prepare(
-    `
-      UPDATE advertisements
-      SET modelId = @modelId,
-          title = @title,
-          price = @price,
-          year = @year,
-          km = @km,
-          fuel = @fuel,
-          gearbox = @gearbox,
-          horsepower = @horsepower,
-          city = @city,
-          province = @province,
-          seller = @seller,
-          source = @source,
-          url = @url,
-          firstSeen = @firstSeen,
-          lastSeen = @lastSeen,
-          notes = @notes
-      WHERE id = @id
-    `
-  ).run(advertisement);
+  updateAdvertisement(advertisement);
 
   response.json(advertisement);
 });
@@ -454,6 +655,10 @@ app.delete("/api/advertisements/:id", (request, response) => {
   response.status(204).send();
 });
 
-app.listen(port, "127.0.0.1", () => {
+const server = app.listen(port, "127.0.0.1", () => {
   console.log(`SUV30 API running on http://127.0.0.1:${port}`);
+});
+
+server.on("error", (error) => {
+  console.error(error);
 });

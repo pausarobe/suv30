@@ -11,20 +11,23 @@ import {
   getOpportunityGradient,
   getOpportunityTextColor,
 } from "@/utils/opportunityStyle";
+import { IoMdArrowBack } from "react-icons/io";
 
 const advertisementService = new AdvertisementService();
 const modelService = new ModelService();
 
 export default function AdvertisementDetailPage() {
   const { id } = useParams();
-  const [advertisement, setAdvertisement] = useState<Advertisement | null>(null);
+  const [advertisement, setAdvertisement] = useState<Advertisement | null>(
+    null,
+  );
   const [models, setModels] = useState<Model[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(id));
   const [error, setError] = useState<string | null>(null);
 
   const model = useMemo(
     () => models.find((candidate) => candidate.id === advertisement?.modelId),
-    [advertisement?.modelId, models]
+    [advertisement?.modelId, models],
   );
   const opportunity = advertisement
     ? calculateOpportunityScore(advertisement, model)
@@ -50,6 +53,7 @@ export default function AdvertisementDetailPage() {
   return (
     <>
       <Link style={backLinkStyle} to="/market">
+        <IoMdArrowBack />
         Volver a Mercado
       </Link>
 
@@ -63,7 +67,9 @@ export default function AdvertisementDetailPage() {
             <div>
               <h1>{advertisement.title}</h1>
               <p style={mutedTextStyle}>
-                {model ? `${model.brand} ${model.model}` : advertisement.modelId}
+                {model
+                  ? `${model.brand} ${model.model}`
+                  : advertisement.modelId}
               </p>
             </div>
 
@@ -74,7 +80,7 @@ export default function AdvertisementDetailPage() {
                 color: getOpportunityTextColor(opportunity.score),
               }}
             >
-              IO {opportunity.score.toFixed(1)}
+              {opportunity.score.toFixed(1)}
             </span>
           </div>
 
@@ -87,14 +93,17 @@ export default function AdvertisementDetailPage() {
               />
               <DetailItem
                 label="Precio"
-                value={`${advertisement.price.toLocaleString("es-ES")} €`}
+                value={`${advertisement.price.toLocaleString("es-ES")} EUR`}
               />
               <DetailItem
                 label="Kilómetros"
                 value={`${advertisement.km.toLocaleString("es-ES")} km`}
               />
               <DetailItem label="Año" value={advertisement.year} />
-              <DetailItem label="Potencia" value={`${advertisement.horsepower} CV`} />
+              <DetailItem
+                label="Potencia"
+                value={`${advertisement.horsepower} CV`}
+              />
               <DetailItem label="Combustible" value={advertisement.fuel} />
               <DetailItem label="Cambio" value={advertisement.gearbox} />
               <DetailItem
@@ -109,13 +118,23 @@ export default function AdvertisementDetailPage() {
             <div style={gridStyle}>
               <DetailItem label="Vendedor" value={advertisement.seller} />
               <DetailItem label="Web origen" value={advertisement.source} />
-              <DetailItem label="Primera vez visto" value={advertisement.firstSeen} />
-              <DetailItem label="Última vez visto" value={advertisement.lastSeen} />
+              <DetailItem
+                label="Primera vez visto"
+                value={advertisement.firstSeen}
+              />
+              <DetailItem
+                label="Última vez visto"
+                value={advertisement.lastSeen}
+              />
               <DetailItem
                 label="URL"
                 value={
                   advertisement.url && advertisement.url !== "#" ? (
-                    <a href={advertisement.url} rel="noreferrer" target="_blank">
+                    <a
+                      href={advertisement.url}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
                       Abrir anuncio
                     </a>
                   ) : (
@@ -123,7 +142,10 @@ export default function AdvertisementDetailPage() {
                   )
                 }
               />
-              <DetailItem label="Notas" value={advertisement.notes || "Sin notas"} />
+              <DetailItem
+                label="Notas"
+                value={advertisement.notes || "Sin notas"}
+              />
             </div>
           </section>
 
@@ -145,11 +167,6 @@ export default function AdvertisementDetailPage() {
                   label="Consumo"
                   value={`${model.consumption.toFixed(1)} l/100 km`}
                 />
-                <DetailItem
-                  label="Precio objetivo"
-                  value={`${model.targetPrice.toLocaleString("es-ES")} €`}
-                />
-                <DetailItem label="Valoración" value={model.rating} />
               </div>
             </section>
           )}
@@ -172,13 +189,7 @@ export default function AdvertisementDetailPage() {
   );
 }
 
-function DetailItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: ReactNode;
-}) {
+function DetailItem({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div style={detailItemStyle}>
       <span style={detailLabelStyle}>{label}</span>
@@ -188,10 +199,13 @@ function DetailItem({
 }
 
 const backLinkStyle: React.CSSProperties = {
-  display: "inline-block",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
   marginBottom: "16px",
-  color: "#5d28dd",
-  fontWeight: 800,
+  color: "#18212f",
+  // color: "var(--color-secondary)",
+  fontWeight: 600,
   textDecoration: "none",
 };
 

@@ -1,0 +1,6 @@
+interface:
+  display_name: "SUV30 marketplace import agent"
+  short_description: "Import marketplace listings into SUV30"
+  default_prompt: "Use $suv30-cochesnet-agent to search SUV30 target marketplaces and import matching listings into the local app."
+policy:
+  allow_implicit_invocation: true

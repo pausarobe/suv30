@@ -26,6 +26,27 @@ Construir una herramienta personal para encontrar el mejor SUV compacto de ocasi
 - ocasionplus.com
 - flexicar.es
 
+## Automatizacion de datos
+El MVP permite importar anuncios de webs objetivo de forma manual asistida:
+- El usuario aplica filtros en la web objetivo y copia la URL resultante.
+- En Mercado se elige la web, el modelo SUV30 asociado, se pega la URL y se indica un limite de anuncios.
+- La API local usa Playwright para leer la pagina, visitar anuncios y extraer datos basicos.
+- Se deduplica por URL: si el anuncio existe se actualiza `lastSeen`; si no existe se crea.
+- No se programan tareas automaticas de momento.
+- No se intentan saltar captchas, bloqueos o medidas anti-bot.
+- Si una web bloquea el acceso automatizado, se debe probar otra fuente o importar desde texto/manual.
+
+Fuentes soportadas inicialmente:
+- coches.net
+- autohero.com
+- ocasionplus.com
+- flexicar.es
+- automovilessanchez.es
+- carzaocasion.com
+- generica por URL
+
+La skill local `.codex/skills/suv30-cochesnet-agent` documenta el comportamiento del agente de importacion multi-web y sus criterios.
+
 ## Enfoque
 No buscamos comprar hoy. Queremos una foto inicial del mercado y detectar oportunidades conforme aparezcan.
 
@@ -282,8 +303,6 @@ Funcionalidades MVP:
 - trunk INTEGER
 - consumption REAL
 - ecoLabel TEXT
-- targetPrice INTEGER
-- rating TEXT
 
 ### advertisements
 - id TEXT PRIMARY KEY

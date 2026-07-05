@@ -5,6 +5,27 @@ export type CreateAdvertisementInput = Omit<
   "id" | "firstSeen" | "lastSeen"
 >;
 
+export type MarketplaceImportInput = {
+  source: string;
+  modelId: string;
+  searchUrl: string;
+  maxResults: number;
+};
+
+export type MarketplaceImportResult = {
+  imported: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+  results: Array<{
+    status: "imported" | "updated" | "skipped" | "error";
+    id?: string;
+    title?: string;
+    url: string;
+    reason?: string;
+  }>;
+};
+
 export class AdvertisementService {
   async getAdvertisements(): Promise<Advertisement[]> {
     const response = await fetch("/api/advertisements");
@@ -77,5 +98,51 @@ export class AdvertisementService {
     if (!response.ok) {
       throw new Error("No se ha podido borrar el anuncio");
     }
+  }
+
+  async importFromMarketplace(
+    input: MarketplaceImportInput
+  ): Promise<MarketplaceImportResult> {
+    const response = await fetch("/api/import/listings", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    });
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      const errorResponse = (() => {
+        try {
+          return JSON.parse(responseText) as { error?: string };
+        } catch {
+          return null;
+        }
+      })();
+
+      if (response.status === 404 && responseText.includes("Cannot POST")) {
+        throw new Error(
+          "El servidor API no tiene cargado el importador multi-web. Reinicia `npm run dev` y vuelve a probar."
+        );
+      }
+
+      const parsedErrorResponse = errorResponse as {
+        error?: string;
+      } | null;
+
+      throw new Error(
+        (parsedErrorResponse?.error ?? responseText.trim()) ||
+          "No se ha podido importar desde la web indicada"
+      );
+    }
+
+    return response.json() as Promise<MarketplaceImportResult>;
+  }
+
+  async importFromCochesNet(
+    input: Omit<MarketplaceImportInput, "source">
+  ): Promise<MarketplaceImportResult> {
+    return this.importFromMarketplace({ ...input, source: "cochesnet" });
   }
 }

@@ -1,5 +1,6 @@
 .table {
   width: 100%;
+  min-width: 1040px;
   margin-top: 1rem;
   overflow: hidden;
   border: 1px solid #dce4ef;
@@ -35,7 +36,6 @@
 
 @media (max-width: 760px) {
   .table {
-    min-width: 920px;
     margin-top: 0.75rem;
   }
 

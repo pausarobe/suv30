@@ -9,6 +9,4 @@ export interface Model {
   trunk: number;
   consumption: number;
   ecoLabel: "0" | "ECO" | "C" | "B";
-  targetPrice: number;
-  rating: string;
 }
