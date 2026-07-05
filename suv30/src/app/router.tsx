@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router-dom";
 
 import DashboardPage from "@/pages/Dashboard/DashboardPage";
+import AdvertisementDetailPage from "@/pages/Market/AdvertisementDetailPage";
 import MarketPage from "@/pages/Market/MarketPage";
 import SettingsPage from "@/pages/Settings/SettingsPage";
 import MainLayout from "@/layouts/MainLayout";
@@ -22,6 +23,10 @@ export const router = createBrowserRouter([
       {
         path: "market",
         element: <MarketPage />,
+      },
+      {
+        path: "market/:id",
+        element: <AdvertisementDetailPage />,
       },
       {
         path: "settings",

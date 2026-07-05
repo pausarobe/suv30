@@ -276,7 +276,12 @@ Funcionalidades MVP:
 - brand TEXT
 - model TEXT
 - generation TEXT
+- length INTEGER
+- width INTEGER
+- height INTEGER
 - trunk INTEGER
+- consumption REAL
+- ecoLabel TEXT
 - targetPrice INTEGER
 - rating TEXT
 
@@ -318,3 +323,11 @@ No rehacer arquitectura. Avanzar con cambios pequeños:
 - Dashboard cuenta oportunidades reales y muestra los mejores anuncios actuales.
 - Radar de Chollos muestra los anuncios más prometedores.
 - Los JSON de semilla se han eliminado. SQLite (`suv30.db`) es la fuente de datos.
+- Los modelos guardan consumo estimado (`consumption`, l/100 km) y el IO lo usa para premiar modelos eficientes o penalizar consumos altos.
+- ModelsPage permite crear modelos con consumo y medidas (largo x ancho x alto).
+- ModelsPage permite borrar modelos si no tienen anuncios asociados.
+- MarketPage permite borrar anuncios.
+- ModelsPage permite editar modelos existentes.
+- MarketPage permite editar anuncios existentes.
+- Existe detalle de anuncio en `/market/:id` con datos completos, modelo asociado e IO.
+- Los modelos guardan etiqueta ecológica (`0`, `ECO`, `C`, `B`).

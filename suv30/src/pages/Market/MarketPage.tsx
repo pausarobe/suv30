@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { MdDeleteForever, MdEdit, MdOpenInNew } from "react-icons/md";
 
 import type { Advertisement } from "@/domain/Advertisement";
 import type { Model } from "@/domain/Model";
@@ -8,6 +10,10 @@ import {
 } from "@/services/AdvertisementService";
 import { ModelService } from "@/services/ModelService";
 import { enrichAdvertisementsWithOpportunity } from "@/services/OpportunityService";
+import {
+  getOpportunityGradient,
+  getOpportunityTextColor,
+} from "@/utils/opportunityStyle";
 
 type AdvertisementFormState = {
   modelId: string;
@@ -50,6 +56,9 @@ export default function MarketPage() {
   const [advertisements, setAdvertisements] = useState<Advertisement[]>([]);
   const [models, setModels] = useState<Model[]>([]);
   const [form, setForm] = useState<AdvertisementFormState>(defaultFormState);
+  const [editingAdvertisementId, setEditingAdvertisementId] = useState<
+    string | null
+  >(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,22 +127,85 @@ export default function MarketPage() {
     };
 
     try {
-      const createdAdvertisement =
-        await advertisementService.createAdvertisement(advertisement);
+      const savedAdvertisement = editingAdvertisementId
+        ? await advertisementService.updateAdvertisement(
+            editingAdvertisementId,
+            advertisement
+          )
+        : await advertisementService.createAdvertisement(advertisement);
 
-      setAdvertisements((currentAdvertisements) => [
-        ...currentAdvertisements,
-        createdAdvertisement,
-      ]);
+      setAdvertisements((currentAdvertisements) =>
+        editingAdvertisementId
+          ? currentAdvertisements.map((currentAdvertisement) =>
+              currentAdvertisement.id === editingAdvertisementId
+                ? savedAdvertisement
+                : currentAdvertisement
+            )
+          : [...currentAdvertisements, savedAdvertisement]
+      );
       setForm({
         ...defaultFormState,
         modelId: form.modelId,
       });
-      setFormMessage("Anuncio guardado.");
+      setEditingAdvertisementId(null);
+      setFormMessage(
+        editingAdvertisementId ? "Anuncio actualizado." : "Anuncio guardado."
+      );
     } catch {
-      setFormMessage("No se ha podido guardar el anuncio.");
+      setFormMessage(
+        editingAdvertisementId
+          ? "No se ha podido actualizar el anuncio."
+          : "No se ha podido guardar el anuncio."
+      );
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleEditAdvertisement = (advertisement: Advertisement) => {
+    setEditingAdvertisementId(advertisement.id);
+    setForm({
+      modelId: advertisement.modelId,
+      title: advertisement.title,
+      price: String(advertisement.price),
+      year: String(advertisement.year),
+      km: String(advertisement.km),
+      fuel: advertisement.fuel,
+      gearbox: advertisement.gearbox,
+      horsepower: String(advertisement.horsepower),
+      city: advertisement.city,
+      province: advertisement.province,
+      seller: advertisement.seller,
+      source: advertisement.source,
+      url: advertisement.url,
+      notes: advertisement.notes ?? "",
+    });
+    setFormMessage("Editando anuncio.");
+  };
+
+  const cancelEdit = () => {
+    setEditingAdvertisementId(null);
+    setForm({
+      ...defaultFormState,
+      modelId: models[0]?.id ?? "",
+    });
+    setFormMessage(null);
+  };
+
+  const handleDeleteAdvertisement = async (id: string) => {
+    setFormMessage(null);
+
+    try {
+      await advertisementService.deleteAdvertisement(id);
+      setAdvertisements((currentAdvertisements) =>
+        currentAdvertisements.filter((advertisement) => advertisement.id !== id)
+      );
+      if (editingAdvertisementId === id) {
+        cancelEdit();
+      }
+      setFormMessage("Anuncio borrado.");
+    } catch {
+      setFormMessage("No se ha podido borrar el anuncio.");
     }
   };
 
@@ -148,33 +220,10 @@ export default function MarketPage() {
 
       {!isLoading && !error && (
         <>
-          <section style={radarStyle}>
-            <h2 style={sectionTitleStyle}>Radar de Chollos</h2>
-
-            {radarDeals.length === 0 ? (
-              <p>No hay oportunidades claras ahora mismo.</p>
-            ) : (
-              <div style={radarListStyle}>
-                {radarDeals.slice(0, 3).map(({ advertisement, opportunity }) => (
-                  <article key={advertisement.id} style={radarItemStyle}>
-                    <strong>{advertisement.title}</strong>
-                    <span>
-                      IO {opportunity.score.toFixed(1)} ·{" "}
-                      {opportunity.classification}
-                    </span>
-                    <span>
-                      {advertisement.price.toLocaleString("es-ES")} € ·{" "}
-                      {advertisement.km.toLocaleString("es-ES")} km ·{" "}
-                      {advertisement.city}
-                    </span>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-
           <form onSubmit={handleSubmit} style={formStyle}>
-            <h2 style={sectionTitleStyle}>Añadir anuncio</h2>
+            <h2 style={sectionTitleStyle}>
+              {editingAdvertisementId ? "Editar anuncio" : "Añadir anuncio"}
+            </h2>
 
             <label style={fieldStyle}>
               Modelo
@@ -341,11 +390,47 @@ export default function MarketPage() {
 
             <div style={actionsStyle}>
               <button disabled={isSaving || models.length === 0} type="submit">
-                {isSaving ? "Guardando..." : "Guardar anuncio"}
+                {isSaving
+                  ? "Guardando..."
+                  : editingAdvertisementId
+                    ? "Guardar cambios"
+                    : "Guardar anuncio"}
               </button>
+              {editingAdvertisementId && (
+                <button onClick={cancelEdit} style={secondaryButtonStyle} type="button">
+                  Cancelar
+                </button>
+              )}
               {formMessage && <span>{formMessage}</span>}
             </div>
           </form>
+
+          <section style={radarStyle}>
+            <h2 style={sectionTitleStyle}>Radar de Chollos</h2>
+
+            {radarDeals.length === 0 ? (
+              <p>No hay oportunidades claras ahora mismo.</p>
+            ) : (
+              <div style={radarListStyle}>
+                {radarDeals
+                  .slice(0, 3)
+                  .map(({ advertisement, opportunity }) => (
+                    <article key={advertisement.id} style={radarItemStyle}>
+                      <strong>{advertisement.title}</strong>
+                      <span>
+                        <OpportunityBadge score={opportunity.score} />{" "}
+                        {opportunity.classification}
+                      </span>
+                      <span>
+                        {advertisement.price.toLocaleString("es-ES")} € ·{" "}
+                        {advertisement.km.toLocaleString("es-ES")} km ·{" "}
+                        {advertisement.city}
+                      </span>
+                    </article>
+                  ))}
+              </div>
+            )}
+          </section>
 
           <div style={tableShellStyle}>
             <table style={tableStyle}>
@@ -354,12 +439,11 @@ export default function MarketPage() {
                   <th style={thStyle}>IO</th>
                   <th style={thStyle}>Estado</th>
                   <th style={thStyle}>Modelo</th>
-                  <th style={thStyle}>Título</th>
                   <th style={thStyle}>Precio</th>
                   <th style={thStyle}>Km</th>
                   <th style={thStyle}>Año</th>
-                  <th style={thStyle}>Ciudad</th>
                   <th style={thStyle}>Motivos</th>
+                  <th style={thStyle}>Acciones</th>
                 </tr>
               </thead>
 
@@ -368,7 +452,7 @@ export default function MarketPage() {
                   ({ advertisement, model, opportunity }) => (
                     <tr key={advertisement.id}>
                       <td style={tdStyle}>
-                        <strong>{opportunity.score.toFixed(1)}</strong>
+                        <OpportunityBadge score={opportunity.score} />
                       </td>
                       <td style={tdStyle}>{opportunity.classification}</td>
                       <td style={tdStyle}>
@@ -376,7 +460,6 @@ export default function MarketPage() {
                           ? `${model.brand} ${model.model}`
                           : advertisement.modelId}
                       </td>
-                      <td style={tdStyle}>{advertisement.title}</td>
                       <td style={tdStyle}>
                         {advertisement.price.toLocaleString("es-ES")} €
                       </td>
@@ -384,9 +467,37 @@ export default function MarketPage() {
                         {advertisement.km.toLocaleString("es-ES")}
                       </td>
                       <td style={tdStyle}>{advertisement.year}</td>
-                      <td style={tdStyle}>{advertisement.city}</td>
                       <td style={tdStyle}>
                         {opportunity.reasons.slice(0, 3).join(" · ")}
+                      </td>
+                      <td style={tdStyle}>
+                        <div style={rowActionsStyle}>
+                          <Link
+                            aria-label="Ver detalle"
+                            style={linkIconStyle}
+                            to={`/market/${advertisement.id}`}
+                          >
+                            <MdOpenInNew />
+                          </Link>
+                          <button
+                            aria-label="Editar anuncio"
+                            onClick={() => handleEditAdvertisement(advertisement)}
+                            style={editButtonStyle}
+                            type="button"
+                          >
+                            <MdEdit />
+                          </button>
+                          <button
+                            aria-label="Borrar anuncio"
+                            onClick={() =>
+                              handleDeleteAdvertisement(advertisement.id)
+                            }
+                            style={deleteButtonStyle}
+                            type="button"
+                          >
+                            <MdDeleteForever />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -399,6 +510,33 @@ export default function MarketPage() {
     </>
   );
 }
+
+function OpportunityBadge({ score }: { score: number }) {
+  const displayScore = score === 10 ? "10" : score.toFixed(1);
+
+  return (
+    <span
+      style={{
+        ...opportunityBadgeStyle,
+        background: getOpportunityGradient(score),
+        color: getOpportunityTextColor(score),
+      }}
+    >
+      {displayScore}
+    </span>
+  );
+}
+
+const opportunityBadgeStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "999px",
+  padding: "5px 9px",
+  fontSize: "0.82rem",
+  fontWeight: 800,
+  boxShadow: "0 8px 18px rgb(15 23 42 / 14%)",
+};
 
 const sectionTitleStyle: React.CSSProperties = {
   gridColumn: "1 / -1",
@@ -422,7 +560,7 @@ const radarListStyle: React.CSSProperties = {
 
 const radarItemStyle: React.CSSProperties = {
   display: "grid",
-  gap: "4px",
+  gap: "6px",
   padding: "10px",
   border: "1px solid #edf2f7",
   borderRadius: "6px",
@@ -431,7 +569,7 @@ const radarItemStyle: React.CSSProperties = {
 
 const formStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))",
   gap: "12px",
   marginTop: "1rem",
   padding: "16px",
@@ -465,12 +603,18 @@ const actionsStyle: React.CSSProperties = {
   gridColumn: "1 / -1",
   display: "flex",
   alignItems: "center",
+  flexWrap: "wrap",
   gap: "12px",
+};
+
+const secondaryButtonStyle: React.CSSProperties = {
+  background: "#64748b",
 };
 
 const tableShellStyle: React.CSSProperties = {
   marginTop: "1.5rem",
   overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
   border: "1px solid #dce4ef",
   borderRadius: "8px",
   background: "#ffffff",
@@ -479,7 +623,7 @@ const tableShellStyle: React.CSSProperties = {
 
 const tableStyle: React.CSSProperties = {
   width: "100%",
-  minWidth: "980px",
+  minWidth: "1040px",
   borderCollapse: "collapse",
 };
 
@@ -497,4 +641,36 @@ const tdStyle: React.CSSProperties = {
   padding: "12px",
   borderBottom: "1px solid #edf2f7",
   verticalAlign: "top",
+};
+
+const rowActionsStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  gap: "10px",
+};
+
+const iconActionStyle: React.CSSProperties = {
+  padding: 0,
+  background: "transparent",
+  borderRadius: "4px",
+  cursor: "pointer",
+  width: "auto",
+  minHeight: "auto",
+  fontSize: "1.2rem",
+};
+
+const linkIconStyle: React.CSSProperties = {
+  ...iconActionStyle,
+  color: "#2563eb",
+  display: "inline-flex",
+};
+
+const editButtonStyle: React.CSSProperties = {
+  ...iconActionStyle,
+  color: "#475569",
+};
+
+const deleteButtonStyle: React.CSSProperties = {
+  ...iconActionStyle,
+  color: "#dc2626",
 };

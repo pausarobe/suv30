@@ -5,6 +5,10 @@ import type { Advertisement } from "@/domain/Advertisement";
 import type { Model } from "@/domain/Model";
 import type { OpportunityScore } from "@/domain/Opportunity";
 import { DashboardService } from "@/services/DashboardService";
+import {
+  getOpportunityGradient,
+  getOpportunityTextColor,
+} from "@/utils/opportunityStyle";
 
 type RankedAdvertisement = {
   advertisement: Advertisement;
@@ -50,14 +54,7 @@ export default function DashboardPage() {
 
       {!isLoading && !error && (
         <>
-          <div
-            style={{
-              display: "flex",
-              gap: "20px",
-              flexWrap: "wrap",
-              marginTop: "20px",
-            }}
-          >
+          <div style={statsGridStyle}>
             <StatCard title="Modelos" value={stats.models} />
 
             <StatCard title="Anuncios" value={stats.advertisements} />
@@ -80,10 +77,10 @@ export default function DashboardPage() {
                 {stats.bestAdvertisements.map(
                   ({ advertisement, model, opportunity }) => (
                     <article key={advertisement.id} style={itemStyle}>
-                      <strong>
-                        IO {opportunity.score.toFixed(1)} ·{" "}
-                        {opportunity.classification}
-                      </strong>
+                      <div style={itemHeaderStyle}>
+                        <OpportunityBadge score={opportunity.score} />
+                        <strong>{opportunity.classification}</strong>
+                      </div>
                       <span>{advertisement.title}</span>
                       <span>
                         {model
@@ -104,8 +101,29 @@ export default function DashboardPage() {
   );
 }
 
+function OpportunityBadge({ score }: { score: number }) {
+  return (
+    <span
+      style={{
+        ...opportunityBadgeStyle,
+        background: getOpportunityGradient(score),
+        color: getOpportunityTextColor(score),
+      }}
+    >
+      IO {score.toFixed(1)}
+    </span>
+  );
+}
+
+const statsGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(210px, 100%), 1fr))",
+  gap: "14px",
+  marginTop: "18px",
+};
+
 const sectionStyle: React.CSSProperties = {
-  marginTop: "24px",
+  marginTop: "22px",
   padding: "16px",
   border: "1px solid #dce4ef",
   borderRadius: "8px",
@@ -125,9 +143,28 @@ const listStyle: React.CSSProperties = {
 
 const itemStyle: React.CSSProperties = {
   display: "grid",
-  gap: "4px",
+  gap: "6px",
   padding: "10px",
   border: "1px solid #edf2f7",
   borderRadius: "6px",
   background: "#f8fafc",
+};
+
+const itemHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  flexWrap: "wrap",
+};
+
+const opportunityBadgeStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: "66px",
+  borderRadius: "999px",
+  padding: "5px 9px",
+  fontSize: "0.82rem",
+  fontWeight: 800,
+  boxShadow: "0 8px 18px rgb(15 23 42 / 14%)",
 };

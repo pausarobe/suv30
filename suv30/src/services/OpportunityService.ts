@@ -74,6 +74,13 @@ export function calculateOpportunityScore(
       score += 0.2;
     }
 
+    const consumptionScore = getConsumptionScore(model.consumption);
+    score += consumptionScore.score;
+
+    if (consumptionScore.reason) {
+      reasons.push(consumptionScore.reason);
+    }
+
     if (model.rating.toLowerCase().includes("recomendable")) {
       score += 0.3;
     }
@@ -144,6 +151,48 @@ export function enrichAdvertisementsWithOpportunity(
       ),
     }))
     .sort((a, b) => b.opportunity.score - a.opportunity.score);
+}
+
+function getConsumptionScore(consumption: number) {
+  if (consumption <= 0) {
+    return {
+      score: 0,
+      reason: "",
+    };
+  }
+
+  if (consumption <= 5.8) {
+    return {
+      score: 0.8,
+      reason: "Consumo muy bueno",
+    };
+  }
+
+  if (consumption <= 6.6) {
+    return {
+      score: 0.5,
+      reason: "Consumo bueno",
+    };
+  }
+
+  if (consumption <= 7.2) {
+    return {
+      score: 0.1,
+      reason: "Consumo correcto",
+    };
+  }
+
+  if (consumption <= 8) {
+    return {
+      score: -0.4,
+      reason: "Consumo algo alto",
+    };
+  }
+
+  return {
+    score: -0.9,
+    reason: "Consumo alto",
+  };
 }
 
 function classifyAdvertisement(score: number): OpportunityClassification {

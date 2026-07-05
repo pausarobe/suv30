@@ -8,10 +8,11 @@ export default function MainLayout() {
   return (
     <div className={styles.layout}>
       <aside className={styles.sidebar}>
-        <h2 className={styles.title}>
-          SUV30
-          <span className={styles.subtitle}>Radar personal de compra</span>
-        </h2>
+        {/* <h2 className={styles.title}>
+            <div className={styles.logo}>SUV30</div>
+            <span className={styles.subtitle}>Radar personal de compra</span>
+          </h2> */}
+        <img src="/suv30-logo.png" alt="SUV30 Logo" />
 
         <nav className={styles.nav}>
           <NavLink className={getLinkClassName} to="/">

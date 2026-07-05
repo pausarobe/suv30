@@ -3,7 +3,12 @@ export interface Model {
   brand: string;
   model: string;
   generation: string;
+  length: number;
+  width: number;
+  height: number;
   trunk: number;
+  consumption: number;
+  ecoLabel: "0" | "ECO" | "C" | "B";
   targetPrice: number;
   rating: string;
 }
