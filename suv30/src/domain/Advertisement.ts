@@ -7,6 +7,8 @@ export interface Advertisement {
 
   url: string;
 
+  imageUrl?: string;
+
   price: number;
 
   year: number;

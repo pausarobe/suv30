@@ -94,7 +94,8 @@ export function calculateOpportunityScore(
     reasons.push("Ano menos prioritario");
   }
 
-  const location = `${advertisement.city} ${advertisement.province}`.toLowerCase();
+  const location =
+    `${advertisement.city} ${advertisement.province}`.toLowerCase();
   if (priorityLocations.some((priority) => location.includes(priority))) {
     score += 0.5;
     reasons.push("Zona prioritaria");

@@ -42,6 +42,7 @@ db.exec(`
     seller TEXT NOT NULL,
     source TEXT NOT NULL,
     url TEXT NOT NULL,
+    imageUrl TEXT,
     firstSeen TEXT NOT NULL,
     lastSeen TEXT NOT NULL,
     notes TEXT,
@@ -98,6 +99,15 @@ for (const column of ["length", "width", "height"]) {
 
 if (!hasColumn("ecoLabel")) {
   db.exec("ALTER TABLE models ADD COLUMN ecoLabel TEXT NOT NULL DEFAULT 'C'");
+}
+
+let advertisementColumns = db.prepare("PRAGMA table_info(advertisements)").all();
+const hasAdvertisementColumn = (name) =>
+  advertisementColumns.some((column) => column.name === name);
+
+if (!hasAdvertisementColumn("imageUrl")) {
+  db.exec("ALTER TABLE advertisements ADD COLUMN imageUrl TEXT");
+  advertisementColumns = db.prepare("PRAGMA table_info(advertisements)").all();
 }
 
 const updateModelDefaults = db.prepare(`
@@ -191,6 +201,7 @@ const mapAdvertisementInput = (body, id, firstSeen) => {
     seller: toText(body.seller),
     source: toText(body.source),
     url: toText(body.url),
+    imageUrl: toText(body.imageUrl),
     firstSeen: firstSeen ?? today,
     lastSeen: today,
     notes: toText(body.notes),
@@ -203,11 +214,11 @@ const insertAdvertisement = (advertisement) =>
       `
         INSERT INTO advertisements (
           id, modelId, title, price, year, km, fuel, gearbox, horsepower,
-          city, province, seller, source, url, firstSeen, lastSeen, notes
+          city, province, seller, source, url, imageUrl, firstSeen, lastSeen, notes
         )
         VALUES (
           @id, @modelId, @title, @price, @year, @km, @fuel, @gearbox, @horsepower,
-          @city, @province, @seller, @source, @url, @firstSeen, @lastSeen, @notes
+          @city, @province, @seller, @source, @url, @imageUrl, @firstSeen, @lastSeen, @notes
         )
       `
     )
@@ -231,6 +242,7 @@ const updateAdvertisement = (advertisement) =>
             seller = @seller,
             source = @source,
             url = @url,
+            imageUrl = @imageUrl,
             firstSeen = @firstSeen,
             lastSeen = @lastSeen,
             notes = @notes
@@ -525,6 +537,7 @@ const importListings = async (request, response, defaultSource = "generic") => {
         const advertisement = mapAdvertisementInput(
           {
             ...advertisementInput,
+            imageUrl: advertisementInput.imageUrl || existingAdvertisement.imageUrl,
             notes: existingAdvertisement.notes || advertisementInput.notes,
           },
           existingAdvertisement.id,

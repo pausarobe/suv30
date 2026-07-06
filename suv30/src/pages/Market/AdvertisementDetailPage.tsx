@@ -12,9 +12,32 @@ import {
   getOpportunityTextColor,
 } from "@/utils/opportunityStyle";
 import { IoMdArrowBack } from "react-icons/io";
+import { MdEdit } from "react-icons/md";
 
 const advertisementService = new AdvertisementService();
 const modelService = new ModelService();
+
+type SearchCriteriaFailures = {
+  price: boolean;
+  km: boolean;
+  year: boolean;
+  horsepower: boolean;
+  fuel: boolean;
+  trunk: boolean;
+  consumption: boolean;
+  location: boolean;
+};
+
+const emptySearchCriteriaFailures: SearchCriteriaFailures = {
+  price: false,
+  km: false,
+  year: false,
+  horsepower: false,
+  fuel: false,
+  trunk: false,
+  consumption: false,
+  location: false,
+};
 
 export default function AdvertisementDetailPage() {
   const { id } = useParams();
@@ -32,6 +55,9 @@ export default function AdvertisementDetailPage() {
   const opportunity = advertisement
     ? calculateOpportunityScore(advertisement, model)
     : null;
+  const failedCriteria = advertisement
+    ? getFailedSearchCriteria(advertisement, model)
+    : emptySearchCriteriaFailures;
 
   useEffect(() => {
     if (!id) {
@@ -73,16 +99,32 @@ export default function AdvertisementDetailPage() {
               </p>
             </div>
 
-            <span
-              style={{
-                ...scoreStyle,
-                background: getOpportunityGradient(opportunity.score),
-                color: getOpportunityTextColor(opportunity.score),
-              }}
-            >
-              {opportunity.score.toFixed(1)}
-            </span>
+            <div style={headerActionsStyle}>
+              <Link
+                style={editLinkStyle}
+                to={`/market?edit=${advertisement.id}`}
+              >
+                <MdEdit />
+              </Link>
+              <span
+                style={{
+                  ...scoreStyle,
+                  background: getOpportunityGradient(opportunity.score),
+                  color: getOpportunityTextColor(opportunity.score),
+                }}
+              >
+                {opportunity.score.toFixed(1)}
+              </span>
+            </div>
           </div>
+
+          {advertisement.imageUrl && (
+            <img
+              alt={advertisement.title}
+              src={advertisement.imageUrl}
+              style={heroImageStyle}
+            />
+          )}
 
           <section style={sectionStyle}>
             <h2 style={sectionTitleStyle}>Resumen</h2>
@@ -94,21 +136,33 @@ export default function AdvertisementDetailPage() {
               <DetailItem
                 label="Precio"
                 value={`${advertisement.price.toLocaleString("es-ES")} EUR`}
+                isInvalid={failedCriteria.price}
               />
               <DetailItem
                 label="Kilómetros"
                 value={`${advertisement.km.toLocaleString("es-ES")} km`}
+                isInvalid={failedCriteria.km}
               />
-              <DetailItem label="Año" value={advertisement.year} />
+              <DetailItem
+                label="Año"
+                value={advertisement.year}
+                isInvalid={failedCriteria.year}
+              />
               <DetailItem
                 label="Potencia"
                 value={`${advertisement.horsepower} CV`}
+                isInvalid={failedCriteria.horsepower}
               />
-              <DetailItem label="Combustible" value={advertisement.fuel} />
+              <DetailItem
+                label="Combustible"
+                value={advertisement.fuel}
+                isInvalid={failedCriteria.fuel}
+              />
               <DetailItem label="Cambio" value={advertisement.gearbox} />
               <DetailItem
                 label="Ubicación"
                 value={`${advertisement.city}, ${advertisement.province}`}
+                isInvalid={failedCriteria.location}
               />
             </div>
           </section>
@@ -143,6 +197,22 @@ export default function AdvertisementDetailPage() {
                 }
               />
               <DetailItem
+                label="Imagen"
+                value={
+                  advertisement.imageUrl ? (
+                    <a
+                      href={advertisement.imageUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Abrir imagen
+                    </a>
+                  ) : (
+                    "Sin imagen"
+                  )
+                }
+              />
+              <DetailItem
                 label="Notas"
                 value={advertisement.notes || "Sin notas"}
               />
@@ -162,10 +232,15 @@ export default function AdvertisementDetailPage() {
                   label="Etiqueta ecológica"
                   value={model.ecoLabel || "Pendiente"}
                 />
-                <DetailItem label="Maletero" value={`${model.trunk} L`} />
+                <DetailItem
+                  label="Maletero"
+                  value={`${model.trunk} L`}
+                  isInvalid={failedCriteria.trunk}
+                />
                 <DetailItem
                   label="Consumo"
                   value={`${model.consumption.toFixed(1)} l/100 km`}
+                  isInvalid={failedCriteria.consumption}
                 />
               </div>
             </section>
@@ -189,13 +264,49 @@ export default function AdvertisementDetailPage() {
   );
 }
 
-function DetailItem({ label, value }: { label: string; value: ReactNode }) {
+function DetailItem({
+  label,
+  value,
+  isInvalid = false,
+}: {
+  label: string;
+  value: ReactNode;
+  isInvalid?: boolean;
+}) {
   return (
-    <div style={detailItemStyle}>
+    <div style={isInvalid ? invalidDetailItemStyle : detailItemStyle}>
       <span style={detailLabelStyle}>{label}</span>
       <strong style={detailValueStyle}>{value}</strong>
     </div>
   );
+}
+
+function getFailedSearchCriteria(
+  advertisement: Advertisement,
+  model?: Model,
+): SearchCriteriaFailures {
+  const normalizedText = [
+    advertisement.title,
+    advertisement.fuel,
+    advertisement.notes ?? "",
+    advertisement.city,
+    advertisement.province,
+  ]
+    .join(" ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  return {
+    price: advertisement.price > 30000,
+    km: advertisement.km > 50000,
+    year: advertisement.year < 2024,
+    horsepower: advertisement.horsepower < 140,
+    fuel: /puretech|diesel|electrico/.test(normalizedText),
+    trunk: Boolean(model && model.trunk > 0 && model.trunk < 520),
+    consumption: Boolean(model && model.consumption > 7.2),
+    location: !/zaragoza|reus|tarragona/.test(normalizedText),
+  };
 }
 
 const backLinkStyle: React.CSSProperties = {
@@ -215,6 +326,37 @@ const headerStyle: React.CSSProperties = {
   justifyContent: "space-between",
   gap: "16px",
   flexWrap: "wrap",
+};
+
+const headerActionsStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  flexWrap: "wrap",
+};
+
+const editLinkStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  border: "1px solid #dce4ef",
+  borderRadius: "7px",
+  padding: "8px 10px",
+  background: "#ffffff",
+  color: "#18212f",
+  fontWeight: 800,
+  textDecoration: "none",
+};
+
+const heroImageStyle: React.CSSProperties = {
+  width: "100%",
+  maxHeight: "360px",
+  marginTop: "16px",
+  objectFit: "cover",
+  borderRadius: "8px",
+  border: "1px solid #dce4ef",
+  background: "#f8fafc",
+  display: "block",
 };
 
 const mutedTextStyle: React.CSSProperties = {
@@ -256,6 +398,12 @@ const detailItemStyle: React.CSSProperties = {
   border: "1px solid #edf2f7",
   borderRadius: "7px",
   background: "#f8fafc",
+};
+
+const invalidDetailItemStyle: React.CSSProperties = {
+  ...detailItemStyle,
+  border: "2px solid #dc2626",
+  background: "#fff7f7",
 };
 
 const detailLabelStyle: React.CSSProperties = {

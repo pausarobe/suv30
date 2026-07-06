@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   MdArrowDownward,
   MdArrowUpward,
   MdDeleteForever,
   MdEdit,
-  MdOpenInNew,
+  MdMoreVert,
   MdUnfoldMore,
 } from "react-icons/md";
 
@@ -38,6 +38,7 @@ type AdvertisementFormState = {
   seller: string;
   source: string;
   url: string;
+  imageUrl: string;
   notes: string;
 };
 
@@ -104,6 +105,7 @@ const defaultFormState: AdvertisementFormState = {
   seller: "",
   source: "",
   url: "",
+  imageUrl: "",
   notes: "",
 };
 
@@ -113,6 +115,26 @@ const defaultImportFormState: ImportFormState = {
   searchUrl: "",
   maxResults: "10",
 };
+
+const mapAdvertisementToForm = (
+  advertisement: Advertisement,
+): AdvertisementFormState => ({
+  modelId: advertisement.modelId,
+  title: advertisement.title,
+  price: String(advertisement.price),
+  year: String(advertisement.year),
+  km: String(advertisement.km),
+  fuel: advertisement.fuel,
+  gearbox: advertisement.gearbox,
+  horsepower: String(advertisement.horsepower),
+  city: advertisement.city,
+  province: advertisement.province,
+  seller: advertisement.seller,
+  source: advertisement.source,
+  url: advertisement.url,
+  imageUrl: advertisement.imageUrl ?? "",
+  notes: advertisement.notes ?? "",
+});
 
 const ecoClassMap: Record<string, string> = {
   "0": "cero",
@@ -140,6 +162,8 @@ export default function MarketPage() {
   const [error, setError] = useState<string | null>(null);
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [openActionsId, setOpenActionsId] = useState<string | null>(null);
+  const [hoveredImageId, setHoveredImageId] = useState<string | null>(null);
   const [sortState, setSortState] = useState<MarketSortState>({
     key: "io",
     direction: "desc",
@@ -147,6 +171,7 @@ export default function MarketPage() {
   const [importResult, setImportResult] =
     useState<MarketplaceImportResult | null>(null);
   const navigate = useNavigate();
+  const [, setSearchParams] = useSearchParams();
   const rankedAdvertisements = useMemo(
     () => enrichAdvertisementsWithOpportunity(advertisements, models),
     [advertisements, models],
@@ -185,10 +210,24 @@ export default function MarketPage() {
         setAdvertisements(advertisementsResponse);
         setModels(modelsResponse);
 
-        setForm((currentForm) => ({
-          ...currentForm,
-          modelId: currentForm.modelId || modelsResponse[0]?.id || "",
-        }));
+        const editAdvertisementId = new URLSearchParams(
+          window.location.search,
+        ).get("edit");
+        const advertisementToEdit = advertisementsResponse.find(
+          (advertisement) => advertisement.id === editAdvertisementId,
+        );
+
+        if (advertisementToEdit) {
+          setEditingAdvertisementId(advertisementToEdit.id);
+          setForm(mapAdvertisementToForm(advertisementToEdit));
+          setFormMessage("Editando anuncio.");
+        } else {
+          setForm((currentForm) => ({
+            ...currentForm,
+            modelId: currentForm.modelId || modelsResponse[0]?.id || "",
+          }));
+        }
+
         setImportForm((currentForm) => ({
           ...currentForm,
           modelId: currentForm.modelId || modelsResponse[0]?.id || "",
@@ -277,6 +316,7 @@ export default function MarketPage() {
       seller: form.seller,
       source: form.source,
       url: form.url || "#",
+      imageUrl: form.imageUrl,
       notes: form.notes,
     };
 
@@ -302,6 +342,7 @@ export default function MarketPage() {
         modelId: form.modelId,
       });
       setEditingAdvertisementId(null);
+      clearEditSearchParam();
       setFormMessage(
         editingAdvertisementId ? "Anuncio actualizado." : "Anuncio guardado.",
       );
@@ -318,23 +359,13 @@ export default function MarketPage() {
 
   const handleEditAdvertisement = (advertisement: Advertisement) => {
     setEditingAdvertisementId(advertisement.id);
-    setForm({
-      modelId: advertisement.modelId,
-      title: advertisement.title,
-      price: String(advertisement.price),
-      year: String(advertisement.year),
-      km: String(advertisement.km),
-      fuel: advertisement.fuel,
-      gearbox: advertisement.gearbox,
-      horsepower: String(advertisement.horsepower),
-      city: advertisement.city,
-      province: advertisement.province,
-      seller: advertisement.seller,
-      source: advertisement.source,
-      url: advertisement.url,
-      notes: advertisement.notes ?? "",
-    });
+    setForm(mapAdvertisementToForm(advertisement));
     setFormMessage("Editando anuncio.");
+    setSearchParams((currentSearchParams) => {
+      const nextSearchParams = new URLSearchParams(currentSearchParams);
+      nextSearchParams.set("edit", advertisement.id);
+      return nextSearchParams;
+    });
   };
 
   const handleOpenAdvertisement = (id: string) => {
@@ -348,6 +379,15 @@ export default function MarketPage() {
       modelId: models[0]?.id ?? "",
     });
     setFormMessage(null);
+    clearEditSearchParam();
+  };
+
+  const clearEditSearchParam = () => {
+    setSearchParams((currentSearchParams) => {
+      const nextSearchParams = new URLSearchParams(currentSearchParams);
+      nextSearchParams.delete("edit");
+      return nextSearchParams;
+    });
   };
 
   const handleDeleteAdvertisement = async (id: string) => {
@@ -396,7 +436,9 @@ export default function MarketPage() {
                 style={{ display: "flex", alignItems: "center", gap: "6px" }}
               >
                 <span>Importar desde web</span>
-                <HiOutlineSparkles style={{ fontSize: "1.5rem", color: "var(--color-primary)" }}/>
+                <HiOutlineSparkles
+                  style={{ fontSize: "1.5rem", color: "var(--color-primary)" }}
+                />
               </div>
             </h2>
             <label style={fieldStyle}>
@@ -415,10 +457,12 @@ export default function MarketPage() {
               </select>
             </label>
 
-            <label style={{
-              ...fieldStyle,
-              gridColumn: "2 / -1",
-            }}>
+            <label
+              style={{
+                ...fieldStyle,
+                gridColumn: "2 / -1",
+              }}
+            >
               Modelo
               <select
                 required
@@ -498,10 +542,12 @@ export default function MarketPage() {
               {editingAdvertisementId ? "Editar anuncio" : "Añadir anuncio"}
             </h2>
 
-            <label style={{
-              ...fieldStyle,
-              gridColumn: "1 / -1",
-            }}>
+            <label
+              style={{
+                ...fieldStyle,
+                gridColumn: "1 / -1",
+              }}
+            >
               Modelo
               <select
                 required
@@ -517,10 +563,12 @@ export default function MarketPage() {
               </select>
             </label>
 
-            <label style={{
-              ...fieldStyle,
-              gridColumn: "1 / 4",
-            }}>
+            <label
+              style={{
+                ...fieldStyle,
+                gridColumn: "1 / 4",
+              }}
+            >
               Título
               <input
                 required
@@ -659,6 +707,16 @@ export default function MarketPage() {
             </label>
 
             <label style={wideFieldStyle}>
+              URL imagen
+              <input
+                value={form.imageUrl}
+                onChange={updateField("imageUrl")}
+                style={inputStyle}
+                placeholder="https://..."
+              />
+            </label>
+
+            <label style={wideFieldStyle}>
               Notas
               <textarea
                 value={form.notes}
@@ -698,7 +756,11 @@ export default function MarketPage() {
                 {radarDeals
                   .slice(0, 3)
                   .map(({ advertisement, opportunity }) => (
-                    <article key={advertisement.id} style={radarItemStyle} onClick={() => handleOpenAdvertisement(advertisement.id)}>
+                    <article
+                      key={advertisement.id}
+                      style={radarItemStyle}
+                      onClick={() => handleOpenAdvertisement(advertisement.id)}
+                    >
                       <strong>{advertisement.title}</strong>
                       <span>
                         <OpportunityBadge score={opportunity.score} />{" "}
@@ -726,13 +788,14 @@ export default function MarketPage() {
                     onSort={handleSort}
                   />
                   <th style={thStyle}>Modelo</th>
+                  <th style={thStyle}>Foto</th>
                   <SortableHeader
                     label="Maletero"
                     sortKey="trunk"
                     sortState={sortState}
                     onSort={handleSort}
                   />
-                  <th style={thStyle}>Etiqueta</th>
+                  <th style={thStyle}>DGT</th>
                   <th style={thStyle}>Consumo</th>
                   <SortableHeader
                     label="Precio"
@@ -740,6 +803,8 @@ export default function MarketPage() {
                     sortState={sortState}
                     onSort={handleSort}
                   />
+                  <th style={thStyle}>Motor</th>
+                  <th style={thStyle}>CV</th>
                   <SortableHeader
                     label="Km"
                     sortKey="km"
@@ -753,18 +818,62 @@ export default function MarketPage() {
                     onSort={handleSort}
                   />
                   <th style={thStyle}>Motivos</th>
-                  <th style={thStyle}><span style={{display: "none"}}>Acciones</span></th>
+                  <th style={thStyle}>
+                    <span style={{ display: "none" }}>Acciones</span>
+                  </th>
                 </tr>
               </thead>
 
               <tbody>
                 {sortedAdvertisements.map(
                   ({ advertisement, model, opportunity }) => (
-                    <tr key={advertisement.id}>
+                    <tr
+                      key={advertisement.id}
+                      onClick={() => handleOpenAdvertisement(advertisement.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          handleOpenAdvertisement(advertisement.id);
+                        }
+                      }}
+                      style={clickableRowStyle}
+                      tabIndex={0}
+                    >
                       <td style={tdStyle}>
                         <OpportunityBadge score={opportunity.score} />
                       </td>
-                      <td style={tdStyle}>{advertisement.title}</td>
+                      <td style={tdStyle}>
+                        <span style={{ fontWeight: "bold" }}>
+                          {model?.model}
+                        </span>{" "}
+                        {model?.generation}
+                      </td>
+                      <td style={tdStyle}>
+                        {advertisement.imageUrl ? (
+                          <span
+                            onMouseEnter={() =>
+                              setHoveredImageId(advertisement.id)
+                            }
+                            onMouseLeave={() => setHoveredImageId(null)}
+                            style={listingImageWrapperStyle}
+                          >
+                            <img
+                              alt={advertisement.title}
+                              src={advertisement.imageUrl}
+                              style={listingImageStyle}
+                            />
+                            {hoveredImageId === advertisement.id && (
+                              <img
+                                alt=""
+                                aria-hidden="true"
+                                src={advertisement.imageUrl}
+                                style={listingImagePreviewStyle}
+                              />
+                            )}
+                          </span>
+                        ) : (
+                          "Sin foto"
+                        )}
+                      </td>
                       <td style={tdStyle}>
                         {model?.trunk ? `${model.trunk} L` : "Pendiente"}
                       </td>
@@ -779,48 +888,78 @@ export default function MarketPage() {
                       </td>
                       <td style={tdStyle}>
                         {model?.consumption
-                          ? `${model.consumption.toFixed(1)} l/100`
+                          ? `${model.consumption.toFixed(1)}`
                           : "Pendiente"}
                       </td>
                       <td style={tdStyle}>
                         {advertisement.price.toLocaleString("es-ES")} €
                       </td>
                       <td style={tdStyle}>
+                        {formatEngineType(advertisement.fuel)}
+                      </td>
+                      <td style={tdStyle}>
+                        {advertisement.horsepower
+                          ? `${advertisement.horsepower} CV`
+                          : "Pendiente"}
+                      </td>
+                      <td style={tdStyle}>
                         {advertisement.km.toLocaleString("es-ES")}
                       </td>
                       <td style={tdStyle}>{advertisement.year}</td>
                       <td style={tdStyle}>
-                        {opportunity.reasons.slice(0, 3).join(" · ")}
+                        {formatListingReasons(
+                          advertisement,
+                          model,
+                          opportunity.reasons,
+                        )}
                       </td>
                       <td style={tdStyle}>
-                        <div style={rowActionsStyle}>
-                          <Link
-                            aria-label="Ver detalle"
-                            style={linkIconStyle}
-                            to={`/market/${advertisement.id}`}
-                          >
-                            <MdOpenInNew />
-                          </Link>
+                        <div
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => event.stopPropagation()}
+                          style={rowActionsStyle}
+                        >
                           <button
-                            aria-label="Editar anuncio"
+                            aria-expanded={openActionsId === advertisement.id}
+                            aria-label="Abrir acciones"
                             onClick={() =>
-                              handleEditAdvertisement(advertisement)
+                              setOpenActionsId((currentOpenActionsId) =>
+                                currentOpenActionsId === advertisement.id
+                                  ? null
+                                  : advertisement.id,
+                              )
                             }
-                            style={editButtonStyle}
+                            style={actionsMenuButtonStyle}
                             type="button"
                           >
-                            <MdEdit />
+                            <MdMoreVert />
                           </button>
-                          <button
-                            aria-label="Borrar anuncio"
-                            onClick={() =>
-                              handleDeleteAdvertisement(advertisement.id)
-                            }
-                            style={deleteButtonStyle}
-                            type="button"
-                          >
-                            <MdDeleteForever />
-                          </button>
+                          {openActionsId === advertisement.id && (
+                            <div style={actionsMenuStyle}>
+                              <button
+                                onClick={() => {
+                                  setOpenActionsId(null);
+                                  handleEditAdvertisement(advertisement);
+                                }}
+                                style={actionsMenuItemStyle}
+                                type="button"
+                              >
+                                <MdEdit />
+                                Editar
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setOpenActionsId(null);
+                                  handleDeleteAdvertisement(advertisement.id);
+                                }}
+                                style={actionsMenuDangerItemStyle}
+                                type="button"
+                              >
+                                <MdDeleteForever />
+                                Borrar
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -850,7 +989,6 @@ function OpportunityBadge({ score }: { score: number }) {
     </span>
   );
 }
-
 function formatModelOptionLabel(model: Model) {
   const details = [
     model.generation,
@@ -860,6 +998,121 @@ function formatModelOptionLabel(model: Model) {
   ].filter(Boolean);
 
   return `${model.brand} ${model.model}${details.length ? ` - ${details.join(" · ")}` : ""}`;
+}
+
+function formatEngineType(fuel: string) {
+  const normalizedFuel = fuel
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (/phev|enchufable/.test(normalizedFuel)) {
+    return "Híbrido enchufable (PHEV)";
+  }
+
+  if (/hibrido/.test(normalizedFuel)) {
+    return "Híbrido (HEV)";
+  }
+
+  if (/gasolina/.test(normalizedFuel)) {
+    return "Gasolina";
+  }
+
+  return fuel || "Pendiente";
+}
+
+function formatListingReasons(
+  advertisement: Advertisement,
+  model: Model | undefined,
+  opportunityReasons: string[],
+) {
+  const criteriaFailureReasons = getSearchCriteriaFailureReasons(
+    advertisement,
+    model,
+  );
+  const displayedReasons = [
+    ...criteriaFailureReasons,
+    ...opportunityReasons.filter(
+      (reason) => !criteriaFailureReasons.includes(reason),
+    ),
+  ];
+  const maxReasons = Math.max(criteriaFailureReasons.length, 3);
+  const visibleReasons = displayedReasons.slice(0, maxReasons);
+
+  if (visibleReasons.length === 0) {
+    return "Sin motivos";
+  }
+
+  return (
+    <span>
+      {visibleReasons.map((reason, index) => (
+        <span key={reason}>
+          <span
+            style={
+              reason.startsWith("Incumple")
+                ? criteriaFailureReasonStyle
+                : undefined
+            }
+          >
+            {reason}
+          </span>
+          {index < visibleReasons.length - 1 ? " | " : ""}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function getSearchCriteriaFailureReasons(
+  advertisement: Advertisement,
+  model?: Model,
+) {
+  const normalizedText = [
+    advertisement.title,
+    advertisement.fuel,
+    advertisement.notes ?? "",
+    advertisement.city,
+    advertisement.province,
+  ]
+    .join(" ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const reasons: string[] = [];
+
+  if (advertisement.price > 30000) {
+    reasons.push("Incumple: precio > 30.000");
+  }
+
+  if (advertisement.km > 50000) {
+    reasons.push("Incumple: km > 50.000");
+  }
+
+  if (advertisement.year < 2024) {
+    reasons.push("Incumple: año < 2024");
+  }
+
+  if (advertisement.horsepower < 140) {
+    reasons.push("Incumple: menos de 140 CV");
+  }
+
+  if (/puretech|diesel|electrico/.test(normalizedText)) {
+    reasons.push("Incumple: motor descartado");
+  }
+
+  if (model && model.trunk > 0 && model.trunk < 520) {
+    reasons.push("Incumple: maletero < 520 L");
+  }
+
+  if (model && model.consumption > 7.2) {
+    reasons.push("Incumple: consumo > 7.2");
+  }
+
+  if (!/zaragoza|reus|tarragona/.test(normalizedText)) {
+    reasons.push("Incumple: zona no prioritaria");
+  }
+
+  return reasons;
 }
 
 function SortableHeader({
@@ -933,7 +1186,7 @@ const radarItemStyle: React.CSSProperties = {
   border: "1px solid #edf2f7",
   borderRadius: "6px",
   background: "#f8fafc",
-  cursor: "pointer"
+  cursor: "pointer",
 };
 
 const importPanelStyle: React.CSSProperties = {
@@ -1015,7 +1268,7 @@ const tableShellStyle: React.CSSProperties = {
 
 const tableStyle: React.CSSProperties = {
   width: "100%",
-  minWidth: "1220px",
+  minWidth: "1320px",
   borderCollapse: "collapse",
 };
 
@@ -1053,37 +1306,101 @@ const sortableHeaderIconStyle: React.CSSProperties = {
 const tdStyle: React.CSSProperties = {
   padding: "12px",
   borderBottom: "1px solid #edf2f7",
-  verticalAlign: "top",
+  // verticalAlign: "top",
+};
+
+const clickableRowStyle: React.CSSProperties = {
+  cursor: "pointer",
+};
+
+const criteriaFailureReasonStyle: React.CSSProperties = {
+  color: "#dc2626",
+};
+
+const listingImageWrapperStyle: React.CSSProperties = {
+  position: "relative",
+  display: "inline-block",
+};
+
+const listingImageStyle: React.CSSProperties = {
+  width: "88px",
+  height: "58px",
+  objectFit: "cover",
+  borderRadius: "6px",
+  border: "1px solid #e2e8f0",
+  background: "#f8fafc",
+  display: "block",
+};
+
+const listingImagePreviewStyle: React.CSSProperties = {
+  position: "absolute",
+  left: "102px",
+  top: "-38px",
+  width: "320px",
+  maxWidth: "min(320px, 70vw)",
+  height: "210px",
+  objectFit: "cover",
+  borderRadius: "8px",
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  boxShadow: "0 18px 38px rgb(15 23 42 / 22%)",
+  pointerEvents: "none",
+  zIndex: 20,
 };
 
 const rowActionsStyle: React.CSSProperties = {
   display: "flex",
   justifyContent: "center",
-  gap: "10px",
+  position: "relative",
 };
 
-const iconActionStyle: React.CSSProperties = {
+const actionsMenuButtonStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "32px",
+  minHeight: "32px",
   padding: 0,
-  background: "transparent",
-  borderRadius: "4px",
+  border: "1px solid #dce4ef",
+  borderRadius: "7px",
+  background: "#ffffff",
+  color: "#475569",
   cursor: "pointer",
-  width: "auto",
-  minHeight: "auto",
   fontSize: "1.2rem",
 };
 
-const linkIconStyle: React.CSSProperties = {
-  ...iconActionStyle,
-  color: "#2563eb",
-  display: "inline-flex",
+const actionsMenuStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "36px",
+  right: 0,
+  zIndex: 30,
+  display: "grid",
+  minWidth: "128px",
+  padding: "6px",
+  border: "1px solid #dce4ef",
+  borderRadius: "8px",
+  background: "#ffffff",
+  boxShadow: "0 14px 30px rgb(15 23 42 / 16%)",
 };
 
-const editButtonStyle: React.CSSProperties = {
-  ...iconActionStyle,
-  color: "#475569",
+const actionsMenuItemStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-start",
+  gap: "8px",
+  width: "100%",
+  minHeight: "auto",
+  padding: "8px",
+  border: 0,
+  borderRadius: "6px",
+  background: "transparent",
+  color: "#18212f",
+  cursor: "pointer",
+  font: "inherit",
+  fontWeight: 700,
 };
 
-const deleteButtonStyle: React.CSSProperties = {
-  ...iconActionStyle,
+const actionsMenuDangerItemStyle: React.CSSProperties = {
+  ...actionsMenuItemStyle,
   color: "#dc2626",
 };

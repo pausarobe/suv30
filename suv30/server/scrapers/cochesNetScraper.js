@@ -127,8 +127,21 @@ const parsePrice = (text) =>
     /"price"\s*:\s*"?(\d{4,6})"?/i,
     /"amount"\s*:\s*"?(\d{4,6})"?/i,
     /"precio"\s*:\s*"?(\d{4,6})"?/i,
-    /(\d{1,3}(?:[.\s]\d{3})+|\d{4,6})\s*(?:EUR|€)/i,
+    /(\d{1,3}(?:[.\s]\d{3})+|\d{4,6})\s*(?:EUR|\u20ac)/i,
   ]);
+
+const parseFlexicarPrice = (text) =>
+  firstNumberFromPatterns(text, [
+    /Precio al contado:?\s*(\d{1,3}(?:[.\s]\d{3})+|\d{4,6})\s*(?:EUR|\u20ac)/i,
+  ]) || parsePrice(text);
+
+const parseProviderPrice = (text, provider) => {
+  if (provider.id === "flexicar") {
+    return parseFlexicarPrice(text);
+  }
+
+  return parsePrice(text);
+};
 
 const parseKm = (text) =>
   firstNumberFromPatterns(text, [
@@ -219,6 +232,7 @@ const parseGearbox = (text) => {
 
 const parseLocation = (text, url) => {
   const knownLocations = [
+    ["San Fernando de Henares", "Madrid"],
     ["Zaragoza", "Zaragoza"],
     ["Reus", "Tarragona"],
     ["Tarragona", "Tarragona"],
@@ -231,7 +245,7 @@ const parseLocation = (text, url) => {
     ["A Coruna", "A Coruna"],
     ["Albacete", "Albacete"],
   ];
-  const haystack = `${text} ${url}`.replace(/_/g, " ");
+  const haystack = `${text} ${url}`.replace(/[_-]/g, " ");
   const location = knownLocations.find(([city, province]) => {
     const pattern = new RegExp(`\\b(${city}|${province})\\b`, "i");
     return pattern.test(haystack);
@@ -306,6 +320,41 @@ const extractListingUrls = async (page, searchUrl, maxResults, provider) => {
 
 const extractPageContent = async (page) =>
   page.evaluate(() => {
+    const toAbsoluteUrl = (value) => {
+      if (!value || value.startsWith("data:")) {
+        return "";
+      }
+
+      try {
+        return new URL(value, window.location.href).toString();
+      } catch {
+        return "";
+      }
+    };
+    const isLikelyCarImage = (value) =>
+      Boolean(value) &&
+      !/logo|favicon|sprite|placeholder|transparent|icon|badge/i.test(value);
+    const getJsonLdImages = () =>
+      Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
+        .flatMap((script) => {
+          try {
+            const parsed = JSON.parse(script.textContent || "null");
+            const nodes = Array.isArray(parsed) ? parsed : [parsed];
+
+            return nodes.flatMap((node) => {
+              const image = node?.image;
+
+              if (Array.isArray(image)) return image;
+              if (typeof image === "string") return [image];
+              if (image?.url) return [image.url];
+              return [];
+            });
+          } catch {
+            return [];
+          }
+        })
+        .map(toAbsoluteUrl)
+        .find(isLikelyCarImage);
     const title =
       document.querySelector("h1")?.textContent ||
       document.querySelector('[data-testid*="title"]')?.textContent ||
@@ -315,6 +364,26 @@ const extractPageContent = async (page) =>
       document.querySelector('meta[name="description"]')?.getAttribute("content") ||
       document.querySelector('meta[property="og:description"]')?.getAttribute("content") ||
       "";
+    const imageUrl =
+      [
+        document.querySelector('meta[property="og:image"]')?.getAttribute("content"),
+        document.querySelector('meta[name="twitter:image"]')?.getAttribute("content"),
+        document.querySelector('link[rel="image_src"]')?.getAttribute("href"),
+        getJsonLdImages(),
+        ...Array.from(document.images)
+          .filter((image) => image.naturalWidth >= 300 || image.width >= 300)
+          .map(
+            (image) =>
+              image.currentSrc ||
+              image.src ||
+              image.getAttribute("data-src") ||
+              image.getAttribute("data-lazy-src") ||
+              image.getAttribute("data-original") ||
+              ""
+          ),
+      ]
+        .map(toAbsoluteUrl)
+        .find(isLikelyCarImage) || "";
     const scripts = Array.from(document.scripts)
       .map((script) => script.textContent || "")
       .filter((scriptText) =>
@@ -327,6 +396,7 @@ const extractPageContent = async (page) =>
     return {
       title,
       description,
+      imageUrl,
       text: document.body?.innerText || "",
       scripts,
     };
@@ -365,7 +435,7 @@ const extractListing = async (page, url, provider) => {
   const title =
     normalizeText(content.title).replace(/\s*\|\s*Coches\.net.*$/i, "") ||
     getTitleFromUrl(url);
-  const price = parsePrice(fullText);
+  const price = parseProviderPrice(fullText, provider);
   const year = parseYear(fullText);
   const km = parseKm(fullText);
   const horsepower = parseHorsepower(fullText);
@@ -401,6 +471,7 @@ const extractListing = async (page, url, provider) => {
       province: location.province,
       seller: parseSeller(fullText, provider.sourceName),
       source: provider.sourceName,
+      imageUrl: content.imageUrl,
       notes: horsepower
         ? `Importado automaticamente desde ${provider.sourceName}.`
         : `Importado automaticamente desde ${provider.sourceName}. Potencia pendiente de revisar.`,
