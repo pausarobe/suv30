@@ -24,5 +24,4 @@ dist-ssr
 *.sw?
 
 /generated/prisma
-suv30.db
 *.test.db

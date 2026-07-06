@@ -54,7 +54,7 @@ export default function AdvertisementDetailPage() {
     <>
       <Link style={backLinkStyle} to="/market">
         <IoMdArrowBack />
-        Volver a Mercado
+        Volver
       </Link>
 
       {isLoading && <p>Cargando anuncio...</p>}
