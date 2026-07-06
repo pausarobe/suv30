@@ -23,6 +23,7 @@ import {
   getOpportunityTextColor,
 } from "@/utils/opportunityStyle";
 import { RiGeminiLine } from "react-icons/ri";
+import { HiOutlineSparkles } from "react-icons/hi2";
 
 type AdvertisementFormState = {
   modelId: string;
@@ -94,10 +95,10 @@ const defaultFormState: AdvertisementFormState = {
   modelId: "",
   title: "",
   price: "",
-  year: "2025",
+  year: "",
   km: "",
-  fuel: "Gasolina",
-  gearbox: "Manual",
+  fuel: "",
+  gearbox: "",
   horsepower: "",
   city: "",
   province: "",
@@ -392,12 +393,7 @@ export default function MarketPage() {
                 style={{ display: "flex", alignItems: "center", gap: "6px" }}
               >
                 <span>Importar desde web</span>
-                <RiGeminiLine
-                  style={{
-                    fontSize: "1.5rem",
-                    color: "var(--color-secondary)",
-                  }}
-                />
+                <HiOutlineSparkles style={{ fontSize: "1.5rem", color: "var(--color-primary)" }}/>
               </div>
             </h2>
             <label style={fieldStyle}>

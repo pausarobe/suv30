@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import ModelTable from "@/components/ModelTable/ModelTable";
 import type { Model } from "@/domain/Model";
 import { ModelService, type CreateModelInput } from "@/services/ModelService";
-import { RiGeminiLine } from "react-icons/ri";
+import { HiOutlineSparkles } from "react-icons/hi2";
 
 type ModelFormState = {
   brand: string;
@@ -220,9 +220,7 @@ export default function ModelsPage() {
           <section style={parserPanelStyle}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               <h2 style={sectionTitleStyle}>Rellenar desde texto</h2>
-              <RiGeminiLine
-                style={{ fontSize: "1.5rem", color: "var(--color-secondary)" }}
-              />
+              <HiOutlineSparkles style={{ fontSize: "1.5rem", color: "var(--color-primary)" }}/>
             </div>
 
             <label style={wideFieldStyle}>
