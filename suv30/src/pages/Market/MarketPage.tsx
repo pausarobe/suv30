@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   MdArrowDownward,
   MdArrowUpward,
@@ -22,7 +22,6 @@ import {
   getOpportunityGradient,
   getOpportunityTextColor,
 } from "@/utils/opportunityStyle";
-import { RiGeminiLine } from "react-icons/ri";
 import { HiOutlineSparkles } from "react-icons/hi2";
 
 type AdvertisementFormState = {
@@ -147,7 +146,7 @@ export default function MarketPage() {
   });
   const [importResult, setImportResult] =
     useState<MarketplaceImportResult | null>(null);
-
+  const navigate = useNavigate();
   const rankedAdvertisements = useMemo(
     () => enrichAdvertisementsWithOpportunity(advertisements, models),
     [advertisements, models],
@@ -338,6 +337,10 @@ export default function MarketPage() {
     setFormMessage("Editando anuncio.");
   };
 
+  const handleOpenAdvertisement = (id: string) => {
+    navigate(`/market/${id}`);
+  };
+
   const cancelEdit = () => {
     setEditingAdvertisementId(null);
     setForm({
@@ -412,7 +415,10 @@ export default function MarketPage() {
               </select>
             </label>
 
-            <label style={fieldStyle}>
+            <label style={{
+              ...fieldStyle,
+              gridColumn: "2 / -1",
+            }}>
               Modelo
               <select
                 required
@@ -492,7 +498,10 @@ export default function MarketPage() {
               {editingAdvertisementId ? "Editar anuncio" : "Añadir anuncio"}
             </h2>
 
-            <label style={fieldStyle}>
+            <label style={{
+              ...fieldStyle,
+              gridColumn: "1 / -1",
+            }}>
               Modelo
               <select
                 required
@@ -508,7 +517,10 @@ export default function MarketPage() {
               </select>
             </label>
 
-            <label style={fieldStyle}>
+            <label style={{
+              ...fieldStyle,
+              gridColumn: "1 / 4",
+            }}>
               Título
               <input
                 required
@@ -686,7 +698,7 @@ export default function MarketPage() {
                 {radarDeals
                   .slice(0, 3)
                   .map(({ advertisement, opportunity }) => (
-                    <article key={advertisement.id} style={radarItemStyle}>
+                    <article key={advertisement.id} style={radarItemStyle} onClick={() => handleOpenAdvertisement(advertisement.id)}>
                       <strong>{advertisement.title}</strong>
                       <span>
                         <OpportunityBadge score={opportunity.score} />{" "}
@@ -741,7 +753,7 @@ export default function MarketPage() {
                     onSort={handleSort}
                   />
                   <th style={thStyle}>Motivos</th>
-                  <th style={thStyle}>Acciones</th>
+                  <th style={thStyle}><span style={{display: "none"}}>Acciones</span></th>
                 </tr>
               </thead>
 
@@ -921,6 +933,7 @@ const radarItemStyle: React.CSSProperties = {
   border: "1px solid #edf2f7",
   borderRadius: "6px",
   background: "#f8fafc",
+  cursor: "pointer"
 };
 
 const importPanelStyle: React.CSSProperties = {

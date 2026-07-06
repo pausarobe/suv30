@@ -71,7 +71,7 @@ export default function ModelTable({
       <table className={styles.table}>
         <thead>
           <tr>
-            <th>Comparar</th>
+            <th><span style={{display: "none"}}>Comparar</span></th>
             <th>Marca</th>
             <th>Modelo</th>
             <th>Generación</th>
@@ -96,7 +96,7 @@ export default function ModelTable({
               onSort={handleSort}
             />
             <th>Consumo</th>
-            <th>Acciones</th>
+            <th><span style={{display: "none"}}>Acciones</span></th>
           </tr>
         </thead>
 
@@ -111,6 +111,7 @@ export default function ModelTable({
                     !comparisonModelIds.includes(model.id) &&
                     comparisonModelIds.length >= 3
                   }
+                  style={{cursor: "pointer"}}
                   onChange={() => onToggleComparisonModel(model.id)}
                   type="checkbox"
                 />

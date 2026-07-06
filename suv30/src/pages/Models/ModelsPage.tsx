@@ -277,7 +277,10 @@ export default function ModelsPage() {
               />
             </label>
 
-            <label style={fieldStyle}>
+            <label style={{
+              ...fieldStyle,
+              gridColumn: "span 2",
+            }}>
               Generación
               <input
                 required
